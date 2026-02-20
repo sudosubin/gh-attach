@@ -2,6 +2,12 @@
 
 GitHub user attachments upload CLI (WIP).
 
+## Supported Browser
+
+- Chromium Family (Chrome, Chromium, Edge, Brave, Vivaldi, Opera)
+- Firefox
+- Safari
+
 ## Config File
 
 You can use config file to register frequently used browser settings without having to pass them as command line arguments each time.
