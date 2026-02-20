@@ -7,19 +7,29 @@ import (
 	"testing"
 )
 
-func TestResolveSources_CLIOverride(t *testing.T) {
-	t.Parallel()
+func writeDefaultAttachConfig(t *testing.T, content string) string {
+	t.Helper()
+
 	dir := t.TempDir()
-	path := filepath.Join(dir, "attach.yml")
-	if err := os.WriteFile(path, []byte("browsers: [\n"), 0o644); err != nil {
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	path := filepath.Join(dir, "gh", "attach.yml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 
+	return path
+}
+
+func TestResolveSources_CLIOverride(t *testing.T) {
 	sources, err := ResolveSources(ResolveInput{
 		Browser:         "chrome",
 		Profile:         "Default",
 		CookieStorePath: "/tmp/Cookies",
-		ConfigFile:      path,
 	})
 	if err != nil {
 		t.Fatalf("ResolveSources() error = %v", err)
@@ -39,22 +49,15 @@ func TestResolveSources_CLIOverride(t *testing.T) {
 	}
 }
 
-func TestResolveSources_FromConfigFile(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "attach.yml")
-
-	content := `browsers:
+func TestResolveSources_FromDefaultConfigFile(t *testing.T) {
+	writeDefaultAttachConfig(t, `browsers:
   - browser: chrome
     profile: Default
   - browser: firefox
     profile: default-release
-`
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write file: %v", err)
-	}
+`)
 
-	sources, err := ResolveSources(ResolveInput{ConfigFile: path})
+	sources, err := ResolveSources(ResolveInput{})
 	if err != nil {
 		t.Fatalf("ResolveSources() error = %v", err)
 	}
@@ -68,8 +71,11 @@ func TestResolveSources_FromConfigFile(t *testing.T) {
 }
 
 func TestResolveSources_DefaultAutoWhenNoConfig(t *testing.T) {
-	t.Parallel()
-	sources, err := ResolveSources(ResolveInput{ConfigFile: filepath.Join(t.TempDir(), "missing.yml")})
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	sources, err := ResolveSources(ResolveInput{})
 	if err != nil {
 		t.Fatalf("ResolveSources() error = %v", err)
 	}
@@ -79,17 +85,11 @@ func TestResolveSources_DefaultAutoWhenNoConfig(t *testing.T) {
 }
 
 func TestResolveSources_InvalidBrowserInConfig(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "attach.yml")
-	content := `browsers:
+	writeDefaultAttachConfig(t, `browsers:
   - browser: unknown-browser
-`
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write file: %v", err)
-	}
+`)
 
-	_, err := ResolveSources(ResolveInput{ConfigFile: path})
+	_, err := ResolveSources(ResolveInput{})
 	if err == nil {
 		t.Fatalf("ResolveSources() error = nil, want non-nil")
 	}
@@ -99,17 +99,11 @@ func TestResolveSources_InvalidBrowserInConfig(t *testing.T) {
 }
 
 func TestResolveSources_MissingBrowserInConfig(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "attach.yml")
-	content := `browsers:
+	writeDefaultAttachConfig(t, `browsers:
   - profile: Default
-`
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write file: %v", err)
-	}
+`)
 
-	_, err := ResolveSources(ResolveInput{ConfigFile: path})
+	_, err := ResolveSources(ResolveInput{})
 	if err == nil {
 		t.Fatalf("ResolveSources() error = nil, want non-nil")
 	}

@@ -11,7 +11,6 @@ type ResolveInput struct {
 	Browser         string
 	Profile         string
 	CookieStorePath string
-	ConfigFile      string
 }
 
 func ResolveSources(in ResolveInput) ([]Source, error) {
@@ -27,10 +26,7 @@ func ResolveSources(in ResolveInput) ([]Source, error) {
 		}}, nil
 	}
 
-	path := strings.TrimSpace(in.ConfigFile)
-	if path == "" {
-		path = config.DefaultConfigFile()
-	}
+	path := config.DefaultConfigFile()
 
 	cfg, err := config.LoadConfig(path)
 	if err != nil {
