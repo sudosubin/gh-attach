@@ -21,7 +21,6 @@ import (
 type AttachOptions struct {
 	FilePath        string
 	Repo            string
-	Hostname        string
 	Browser         string
 	Profile         string
 	CookieStorePath string
@@ -46,8 +45,7 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&opts.Repo, "repo", "R", "", "[HOST/]OWNER/REPO or REPO")
-	cmd.Flags().StringVar(&opts.Hostname, "hostname", "", "GitHub hostname (default: resolved from repo)")
+	cmd.Flags().StringVarP(&opts.Repo, "repo", "R", "", "[HOST/]OWNER/REPO")
 	cmd.Flags().StringVar(&opts.Browser, "browser", "", "Browser to use (auto|chrome|chromium|edge|firefox|safari|brave|vivaldi|opera)")
 	cmd.Flags().StringVar(&opts.Profile, "profile", "", "Browser profile name or path")
 	cmd.Flags().StringVar(&opts.CookieStorePath, "cookie-store-path", "", "Cookie store file path")
@@ -63,7 +61,7 @@ func attachRun(opts *AttachOptions) error {
 		return fmt.Errorf("file: %w", err)
 	}
 
-	repo, err := ghapi.ResolveRepository(strings.TrimSpace(opts.Repo), strings.TrimSpace(opts.Hostname))
+	repo, err := ghapi.ResolveRepository(strings.TrimSpace(opts.Repo))
 	if err != nil {
 		return fmt.Errorf("resolve repository: %w", err)
 	}

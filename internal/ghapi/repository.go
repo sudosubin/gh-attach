@@ -6,7 +6,6 @@ import (
 	"time"
 
 	ghapi "github.com/cli/go-gh/v2/pkg/api"
-	gauth "github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/cli/go-gh/v2/pkg/repository"
 )
 
@@ -21,8 +20,8 @@ func (r Repository) FullName() string {
 	return fmt.Sprintf("%s/%s", r.Owner, r.Name)
 }
 
-func ResolveRepository(repoArg string, hostnameArg string) (Repository, error) {
-	parsed, err := resolveRepositorySpec(repoArg, hostnameArg, CurrentLogin)
+func ResolveRepository(repoArg string) (Repository, error) {
+	parsed, err := resolveRepositorySpec(repoArg)
 	if err != nil {
 		return Repository{}, err
 	}
@@ -47,55 +46,14 @@ func ResolveRepository(repoArg string, hostnameArg string) (Repository, error) {
 	}, nil
 }
 
-func resolveRepositorySpec(
-	repoArg string,
-	hostnameArg string,
-	currentLogin func(host string) (string, error),
-) (repository.Repository, error) {
+func resolveRepositorySpec(repoArg string) (repository.Repository, error) {
 	repoArg = strings.TrimSpace(repoArg)
-	hostnameArg = strings.TrimSpace(hostnameArg)
 
 	if repoArg != "" {
-		repoSelector := repoArg
-		if !strings.Contains(repoSelector, "/") {
-			host := hostnameArg
-			if host == "" {
-				host, _ = gauth.DefaultHost()
-			}
-
-			currentUser, err := currentLogin(host)
-			if err != nil {
-				return repository.Repository{}, fmt.Errorf("resolve current login: %w", err)
-			}
-			repoSelector = currentUser + "/" + repoSelector
-		}
-
-		if hostnameArg != "" {
-			parsed, err := repository.ParseWithHost(repoSelector, hostnameArg)
-			if err != nil {
-				return repository.Repository{}, err
-			}
-			parsed.Host = hostnameArg
-			return parsed, nil
-		}
-
-		parsed, err := repository.Parse(repoSelector)
-		if err != nil {
-			return repository.Repository{}, err
-		}
-		return parsed, nil
+		return repository.Parse(repoArg)
 	}
 
-	parsed, err := repository.Current()
-	if err != nil {
-		return repository.Repository{}, err
-	}
-
-	if hostnameArg != "" {
-		parsed.Host = hostnameArg
-	}
-
-	return parsed, nil
+	return repository.Current()
 }
 
 func CurrentLogin(host string) (string, error) {
