@@ -1,4 +1,4 @@
-package cookieprovider
+package browserprovider
 
 import (
 	"context"

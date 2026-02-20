@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/browserutils/kooky v0.2.4
 	github.com/cli/go-gh/v2 v2.13.0
+	github.com/nzrsky/useragent-generator v1.0.0
 	github.com/steipete/sweetcookie v0.0.0-20260102214724-68ec5a0bced4
 	gopkg.in/yaml.v3 v3.0.1
 )

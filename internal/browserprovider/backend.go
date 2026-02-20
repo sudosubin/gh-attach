@@ -1,4 +1,4 @@
-package cookieprovider
+package browserprovider
 
 import (
 	"context"
@@ -14,9 +14,15 @@ type Backend interface {
 	Load(ctx context.Context, host string, source cookies.Source) ([]*http.Cookie, error)
 }
 
+type BrowserSession struct {
+	Browser   cookies.Browser
+	Cookies   []*http.Cookie
+	UserAgent string
+}
+
 // BrowserProvider is a browser-specific cookie provider.
 type BrowserProvider interface {
 	Browser() cookies.Browser
 	BackendName() string
-	Load(ctx context.Context, host string, source cookies.Source) ([]*http.Cookie, error)
+	Load(ctx context.Context, host string, source cookies.Source) (BrowserSession, error)
 }
