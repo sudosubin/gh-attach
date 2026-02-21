@@ -36,10 +36,6 @@ func NewService(host string, client RESTGetter) (*Service, error) {
 	return &Service{host: host, client: client}, nil
 }
 
-func (s *Service) Host() string {
-	return s.host
-}
-
 func newRESTClient(host string) (*goapi.RESTClient, error) {
 	opts := goapi.ClientOptions{Host: host, Timeout: requestTimeout}
 

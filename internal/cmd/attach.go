@@ -58,7 +58,7 @@ func attachRun(opts *AttachOptions) error {
 		return fmt.Errorf("file: %w", err)
 	}
 
-	repoSpec, err := ghapi.ResolveRepositorySpec(strings.TrimSpace(opts.Repo))
+	repoSpec, err := ghapi.ResolveRepositorySpec(opts.Repo)
 	if err != nil {
 		return fmt.Errorf("resolve repository spec: %w", err)
 	}

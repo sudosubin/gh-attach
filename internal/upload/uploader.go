@@ -38,9 +38,6 @@ func NewUploader(host string, repositoryID int64, session browserprovider.Browse
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(session.UserAgent) != "" && session.UserAgent != userAgent {
-		return nil, fmt.Errorf("browser session user-agent mismatch for browser %s", session.Browser)
-	}
 
 	cookieHeader, err := cookieHeaderForURL(session.Cookies, "https://"+host+"/")
 	if err != nil {
