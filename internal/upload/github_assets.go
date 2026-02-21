@@ -54,7 +54,7 @@ type refererPageMetadata struct {
 	GitHubClientVersion string
 }
 
-func UploadPoliciesAsset(ctx context.Context, host string, repositoryID int64, filePath string, refererPage *RefererPage, session browserprovider.BrowserSession) (Asset, error) {
+func UploadPoliciesAsset(ctx context.Context, host string, repositoryID int64, filePath string, refererPage *RefererPage, session browserprovider.BrowserSession, client *http.Client) (Asset, error) {
 	if repositoryID <= 0 {
 		return Asset{}, fmt.Errorf("invalid repository id")
 	}
@@ -76,7 +76,9 @@ func UploadPoliciesAsset(ctx context.Context, host string, repositoryID int64, f
 		contentType = "application/octet-stream"
 	}
 
-	client := &http.Client{}
+	if client == nil {
+		client = &http.Client{}
+	}
 	baseURL := fmt.Sprintf("https://%s", host)
 	refererMeta := extractRefererPageMetadata(string(refererPage.Body))
 
