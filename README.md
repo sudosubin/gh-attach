@@ -4,6 +4,13 @@
 
 GitHub user attachment upload CLI for `gh` (GitHub CLI).
 
+## Quick Start
+
+```sh
+brew install --cask sudosubin/gh-attach/gh-attach
+gh attach ./image.png -R owner/repo
+```
+
 ## Installation
 
 ### Homebrew (Cask)
@@ -21,20 +28,7 @@ brew install --cask sudosubin/gh-attach/gh-attach
 
 ### Download from GitHub Releases
 
-Open the [latest release](https://github.com/sudosubin/gh-attach/releases/latest) page, and download the artifact matching your OS/CPU.
-
-## How it works
-
-- It first resolves the target repository (`owner/repo`) and the current GitHub login via the `gh` API.
-- Based on CLI flags or config file, it looks up browser cookie sources and selects a session whose [`dotcom_user`](https://docs.github.com/en/site-policy/privacy-policies/github-cookies#cookies) matches the current login.
-- Using that session cookie, it requests GitHub upload policies (`/upload/policies/assets`) and uploads the file binary.
-- It finalizes the user-attachments asset and prints the result as a URL or formatted output via `--json`.
-
-## Supported Browser
-
-- Chromium Family (Chrome, Chromium, Edge, Brave, Vivaldi, Opera)
-- Firefox
-- Safari
+Open the [latest release](https://github.com/sudosubin/gh-attach/releases/latest) page and download the artifact matching your OS/CPU.
 
 ## Usage
 
@@ -70,7 +64,7 @@ image.png -> https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-
 
 ## Config File
 
-You can use config file to register frequently used browser settings without having to pass them as command line arguments each time.
+You can use a config file to register frequently used browser settings without having to pass them as command line arguments each time.
 
 The config file is loaded from `${XDG_CONFIG_HOME:-~/.config}/gh/attach.yml`.
 
@@ -90,3 +84,16 @@ browsers:
 - `browser`: Browser to read cookies from (Required, one of `auto|chrome|chromium|edge|firefox|safari|brave|vivaldi|opera`)
 - `profile`: Browser profile name/path (Optional, name or path)
 - `cookie_store_path`: Explicit cookie DB file path (Optional)
+
+## Supported Browsers
+
+- Chromium family (Chrome, Chromium, Edge, Brave, Vivaldi, Opera)
+- Firefox
+- Safari
+
+## How it works
+
+- It first resolves the target repository (`owner/repo`) and the current GitHub login via the `gh` API.
+- Based on CLI flags or config file, it looks up browser cookie sources and selects a session whose [`dotcom_user`](https://docs.github.com/en/site-policy/privacy-policies/github-cookies#cookies) matches the current login.
+- Using that session cookie, it requests GitHub upload policies (`/upload/policies/assets`) and uploads the file binary.
+- It finalizes the user-attachments asset and prints the result as a URL or formatted output via `--json`.
