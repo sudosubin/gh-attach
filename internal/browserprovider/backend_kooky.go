@@ -102,14 +102,10 @@ func (b *kookyBackend) loadFromExplicitPath(ctx context.Context, host string, so
 	return out, nil
 }
 
-func profileMatches(expected string, actual string) bool {
+func profileMatches(expected, actual string) bool {
 	expected = strings.TrimSpace(expected)
-	actual = strings.TrimSpace(actual)
 	if expected == "" {
 		return true
 	}
-	if expected == actual {
-		return true
-	}
-	return strings.EqualFold(expected, actual)
+	return strings.EqualFold(expected, strings.TrimSpace(actual))
 }

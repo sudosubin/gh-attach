@@ -53,5 +53,3 @@ func TestResolveCookies_MatchesAnyDotcomUserValue(t *testing.T) {
 		t.Fatalf("session browser = %q, want %q", session.Browser, cookies.BrowserChromium)
 	}
 }
-
-

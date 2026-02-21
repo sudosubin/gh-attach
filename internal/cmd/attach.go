@@ -193,5 +193,3 @@ func containsFold(values []string, target string) bool {
 	}
 	return false
 }
-
-
