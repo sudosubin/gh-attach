@@ -15,12 +15,3 @@ func (s *Service) LatestCommitSHA(owner string, name string) (string, error) {
 
 	return commits[0].SHA, nil
 }
-
-func LatestCommitSHA(host string, owner string, name string) (string, error) {
-	svc, err := NewService(host, nil)
-	if err != nil {
-		return "", err
-	}
-
-	return svc.LatestCommitSHA(owner, name)
-}

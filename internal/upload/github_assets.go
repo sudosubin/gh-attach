@@ -127,10 +127,6 @@ func UploadPoliciesAsset(ctx context.Context, host string, repositoryID int64, f
 	return asset, nil
 }
 
-func extractAuthenticityToken(html string) string {
-	return extractRefererPageMetadata(html).AuthenticityToken
-}
-
 func extractRefererPageMetadata(html string) refererPageMetadata {
 	meta := refererPageMetadata{}
 

@@ -48,39 +48,10 @@ func (s *Service) CurrentLogin() (string, error) {
 	return userResp.Login, nil
 }
 
-func ResolveRepository(repoArg string) (Repository, error) {
-	parsed, err := resolveRepositorySpec(repoArg)
-	if err != nil {
-		return Repository{}, err
-	}
-
-	svc, err := NewService(parsed.Host, nil)
-	if err != nil {
-		return Repository{}, err
-	}
-
-	return svc.ResolveRepository(parsed.Owner, parsed.Name)
-}
-
 func ResolveRepositorySpec(repoArg string) (repository.Repository, error) {
-	return resolveRepositorySpec(repoArg)
-}
-
-func resolveRepositorySpec(repoArg string) (repository.Repository, error) {
 	repoArg = strings.TrimSpace(repoArg)
-
 	if repoArg != "" {
 		return repository.Parse(repoArg)
 	}
-
 	return repository.Current()
-}
-
-func CurrentLogin(host string) (string, error) {
-	svc, err := NewService(host, nil)
-	if err != nil {
-		return "", err
-	}
-
-	return svc.CurrentLogin()
 }

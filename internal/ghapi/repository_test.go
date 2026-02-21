@@ -8,9 +8,9 @@ import (
 func TestResolveRepositorySpec_RejectsRepoOnly(t *testing.T) {
 	t.Setenv("GH_HOST", "github.com")
 
-	_, err := resolveRepositorySpec("nix-skills")
+	_, err := ResolveRepositorySpec("nix-skills")
 	if err == nil {
-		t.Fatalf("resolveRepositorySpec() error = nil, want non-nil")
+		t.Fatalf("ResolveRepositorySpec() error = nil, want non-nil")
 	}
 	if !strings.Contains(err.Error(), "[HOST/]OWNER/REPO") {
 		t.Fatalf("error = %q, want to contain %q", err.Error(), "[HOST/]OWNER/REPO")
@@ -20,9 +20,9 @@ func TestResolveRepositorySpec_RejectsRepoOnly(t *testing.T) {
 func TestResolveRepositorySpec_OwnerRepo(t *testing.T) {
 	t.Setenv("GH_HOST", "github.com")
 
-	parsed, err := resolveRepositorySpec("octocat/hello")
+	parsed, err := ResolveRepositorySpec("octocat/hello")
 	if err != nil {
-		t.Fatalf("resolveRepositorySpec() error = %v", err)
+		t.Fatalf("ResolveRepositorySpec() error = %v", err)
 	}
 	if parsed.Owner != "octocat" || parsed.Name != "hello" {
 		t.Fatalf("parsed = %#v", parsed)
@@ -30,9 +30,9 @@ func TestResolveRepositorySpec_OwnerRepo(t *testing.T) {
 }
 
 func TestResolveRepositorySpec_HostOwnerRepo(t *testing.T) {
-	parsed, err := resolveRepositorySpec("github.example.com/octocat/hello")
+	parsed, err := ResolveRepositorySpec("github.example.com/octocat/hello")
 	if err != nil {
-		t.Fatalf("resolveRepositorySpec() error = %v", err)
+		t.Fatalf("ResolveRepositorySpec() error = %v", err)
 	}
 	if parsed.Host != "github.example.com" || parsed.Owner != "octocat" || parsed.Name != "hello" {
 		t.Fatalf("parsed = %#v", parsed)
@@ -43,9 +43,9 @@ func TestResolveRepositorySpec_EmptyRepoUsesCurrentRepository(t *testing.T) {
 	t.Setenv("GH_REPO", "octocat/hello")
 	t.Setenv("GH_HOST", "github.com")
 
-	parsed, err := resolveRepositorySpec("")
+	parsed, err := ResolveRepositorySpec("")
 	if err != nil {
-		t.Fatalf("resolveRepositorySpec() error = %v", err)
+		t.Fatalf("ResolveRepositorySpec() error = %v", err)
 	}
 	if parsed.Host != "github.com" || parsed.Owner != "octocat" || parsed.Name != "hello" {
 		t.Fatalf("parsed = %#v", parsed)

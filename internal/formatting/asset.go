@@ -92,11 +92,6 @@ func AvailableJSONFields() []string {
 	return out
 }
 
-func PrintJSONFields(w io.Writer) error {
-	_, err := fmt.Fprintf(w, "%s\n", strings.Join(availableAssetFields, "\n"))
-	return err
-}
-
 func selectFields(payload map[string]any, fields []string) (map[string]any, error) {
 	if len(fields) == 0 {
 		return payload, nil
