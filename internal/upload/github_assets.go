@@ -42,9 +42,17 @@ type policiesResponse struct {
 }
 
 var (
-	authTokenInputPattern = regexp.MustCompile(`name=["']authenticity_token["'][^>]*value=["']([^"']+)["']`)
-	csrfMetaPattern       = regexp.MustCompile(`<meta[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']`)
+	authTokenInputPattern          = regexp.MustCompile(`name=["']authenticity_token["'][^>]*value=["']([^"']+)["']`)
+	csrfMetaPattern                = regexp.MustCompile(`<meta[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']`)
+	fetchNonceMetaPattern          = regexp.MustCompile(`<meta[^>]*name=["']fetch-nonce["'][^>]*content=["']([^"']+)["']`)
+	githubClientVersionMetaPattern = regexp.MustCompile(`<meta[^>]*name=["']release["'][^>]*content=["']([^"']+)["']`)
 )
+
+type refererPageMetadata struct {
+	AuthenticityToken   string
+	FetchNonce          string
+	GitHubClientVersion string
+}
 
 func UploadPoliciesAsset(ctx context.Context, host string, repositoryID int64, filePath string, refererPage *RefererPage, session browserprovider.BrowserSession) (Asset, error) {
 	if repositoryID <= 0 {
@@ -70,7 +78,7 @@ func UploadPoliciesAsset(ctx context.Context, host string, repositoryID int64, f
 
 	client := &http.Client{}
 	baseURL := fmt.Sprintf("https://%s", host)
-	authenticityToken := extractAuthenticityToken(string(refererPage.Body))
+	refererMeta := extractRefererPageMetadata(string(refererPage.Body))
 
 	userAgent, err := browserprovider.UserAgentForBrowser(session.Browser)
 	if err != nil {
@@ -85,7 +93,19 @@ func UploadPoliciesAsset(ctx context.Context, host string, repositoryID int64, f
 		return Asset{}, err
 	}
 
-	policies, err := requestPolicies(ctx, client, baseURL, refererPage.URL, cookieHeader, repositoryID, fileName, fileInfo.Size(), contentType, authenticityToken, userAgent)
+	policies, err := requestPolicies(
+		ctx,
+		client,
+		baseURL,
+		refererPage.URL,
+		cookieHeader,
+		repositoryID,
+		fileName,
+		fileInfo.Size(),
+		contentType,
+		refererMeta,
+		userAgent,
+	)
 	if err != nil {
 		return Asset{}, err
 	}
@@ -106,25 +126,36 @@ func UploadPoliciesAsset(ctx context.Context, host string, repositoryID int64, f
 }
 
 func extractAuthenticityToken(html string) string {
-	if m := authTokenInputPattern.FindStringSubmatch(html); len(m) > 1 {
-		return m[1]
-	}
-	if m := csrfMetaPattern.FindStringSubmatch(html); len(m) > 1 {
-		return m[1]
-	}
-
-	return ""
+	return extractRefererPageMetadata(html).AuthenticityToken
 }
 
-func requestPolicies(ctx context.Context, client *http.Client, baseURL string, referer string, cookieHeader string, repositoryID int64, fileName string, fileSize int64, contentType string, authenticityToken string, userAgent string) (policiesResponse, error) {
+func extractRefererPageMetadata(html string) refererPageMetadata {
+	meta := refererPageMetadata{}
+
+	if m := authTokenInputPattern.FindStringSubmatch(html); len(m) > 1 {
+		meta.AuthenticityToken = m[1]
+	} else if m := csrfMetaPattern.FindStringSubmatch(html); len(m) > 1 {
+		meta.AuthenticityToken = m[1]
+	}
+	if m := fetchNonceMetaPattern.FindStringSubmatch(html); len(m) > 1 {
+		meta.FetchNonce = m[1]
+	}
+	if m := githubClientVersionMetaPattern.FindStringSubmatch(html); len(m) > 1 {
+		meta.GitHubClientVersion = m[1]
+	}
+
+	return meta
+}
+
+func requestPolicies(ctx context.Context, client *http.Client, baseURL string, referer string, cookieHeader string, repositoryID int64, fileName string, fileSize int64, contentType string, refererMeta refererPageMetadata, userAgent string) (policiesResponse, error) {
 	payload := &bytes.Buffer{}
 	writer := multipart.NewWriter(payload)
 	_ = writer.WriteField("repository_id", strconv.FormatInt(repositoryID, 10))
 	_ = writer.WriteField("name", fileName)
 	_ = writer.WriteField("size", strconv.FormatInt(fileSize, 10))
 	_ = writer.WriteField("content_type", contentType)
-	if authenticityToken != "" {
-		_ = writer.WriteField("authenticity_token", authenticityToken)
+	if refererMeta.AuthenticityToken != "" {
+		_ = writer.WriteField("authenticity_token", refererMeta.AuthenticityToken)
 	}
 	if err := writer.Close(); err != nil {
 		return policiesResponse{}, err
@@ -139,6 +170,12 @@ func requestPolicies(ctx context.Context, client *http.Client, baseURL string, r
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	req.Header.Set("GitHub-Verified-Fetch", "true")
+	if strings.TrimSpace(refererMeta.FetchNonce) != "" {
+		req.Header.Set("X-Fetch-Nonce", refererMeta.FetchNonce)
+	}
+	if strings.TrimSpace(refererMeta.GitHubClientVersion) != "" {
+		req.Header.Set("X-GitHub-Client-Version", refererMeta.GitHubClientVersion)
+	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	if cookieHeader != "" {
 		setCookieAndUserAgent(req, cookieHeader, userAgent)
