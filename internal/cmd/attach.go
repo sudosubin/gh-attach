@@ -54,6 +54,8 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
 }
 
 func attachRun(opts *AttachOptions) error {
+	ctx := context.Background()
+
 	if _, err := os.Stat(opts.FilePath); err != nil {
 		return fmt.Errorf("file: %w", err)
 	}
@@ -89,7 +91,7 @@ func attachRun(opts *AttachOptions) error {
 
 	providers := browserprovider.NewDefaultRegistry()
 
-	session, selectedSource, selectedProvider, err := resolveCookies(context.Background(), repo.Host, ghLogin, sources, providers, opts.Verbose)
+	session, selectedSource, selectedProvider, err := resolveCookies(ctx, repo.Host, ghLogin, sources, providers, opts.Verbose)
 	if err != nil {
 		return err
 	}
@@ -104,7 +106,7 @@ func attachRun(opts *AttachOptions) error {
 	}
 
 	refererPage, err := uploader.ResolveRefererPage(
-		context.Background(),
+		ctx,
 		[]upload.RefererPageFetcher{
 			upload.NewIssueNewPageFetcher(repo.Host, repo.FullName()),
 			upload.NewLatestCommitPageFetcher(repo.Host, repo.Owner, repo.Name, ghService),
@@ -114,7 +116,7 @@ func attachRun(opts *AttachOptions) error {
 		return err
 	}
 
-	asset, err := uploader.Upload(context.Background(), opts.FilePath, refererPage)
+	asset, err := uploader.Upload(ctx, opts.FilePath, refererPage)
 	if err != nil {
 		return err
 	}
