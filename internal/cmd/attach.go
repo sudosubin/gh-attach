@@ -61,12 +61,22 @@ func attachRun(opts *AttachOptions) error {
 		return fmt.Errorf("file: %w", err)
 	}
 
-	repo, err := ghapi.ResolveRepository(strings.TrimSpace(opts.Repo))
+	repoSpec, err := ghapi.ResolveRepositorySpec(strings.TrimSpace(opts.Repo))
+	if err != nil {
+		return fmt.Errorf("resolve repository spec: %w", err)
+	}
+
+	ghService, err := ghapi.NewService(repoSpec.Host, nil)
+	if err != nil {
+		return fmt.Errorf("init gh api service: %w", err)
+	}
+
+	repo, err := ghService.ResolveRepository(repoSpec.Owner, repoSpec.Name)
 	if err != nil {
 		return fmt.Errorf("resolve repository: %w", err)
 	}
 
-	ghLogin, err := ghapi.CurrentLogin(repo.Host)
+	ghLogin, err := ghService.CurrentLogin()
 	if err != nil {
 		return fmt.Errorf("resolve current login: %w", err)
 	}
@@ -96,7 +106,7 @@ func attachRun(opts *AttachOptions) error {
 		repo.Host,
 		[]upload.RefererPageFetcher{
 			upload.NewIssueNewPageFetcher(repo.Host, repo.FullName()),
-			upload.NewLatestCommitPageFetcher(repo.Host, repo.Owner, repo.Name),
+			upload.NewLatestCommitPageFetcher(repo.Host, repo.Owner, repo.Name, ghService),
 		},
 		session,
 		nil,

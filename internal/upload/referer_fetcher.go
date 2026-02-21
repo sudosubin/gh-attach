@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
-	"github.com/sudosubin/gh-attach/internal/ghapi"
 )
 
 type RefererPage struct {
@@ -20,7 +19,9 @@ type RefererPageFetcher interface {
 	Fetch(ctx context.Context, client *http.Client, cookieHeader string, userAgent string) (*RefererPage, error)
 }
 
-var latestCommitSHAFn = ghapi.LatestCommitSHA
+type LatestCommitSHAResolver interface {
+	LatestCommitSHA(owner string, name string) (string, error)
+}
 
 func NewIssueNewPageFetcher(host string, repoFullName string) RefererPageFetcher {
 	return issueNewPageFetcher{host: host, repoFullName: repoFullName}
@@ -41,18 +42,23 @@ func (f issueNewPageFetcher) Fetch(ctx context.Context, client *http.Client, coo
 	return &RefererPage{URL: pageURL, Body: body}, nil
 }
 
-func NewLatestCommitPageFetcher(host string, owner string, name string) RefererPageFetcher {
-	return latestCommitPageFetcher{host: host, owner: owner, name: name}
+func NewLatestCommitPageFetcher(host string, owner string, name string, resolver LatestCommitSHAResolver) RefererPageFetcher {
+	return latestCommitPageFetcher{host: host, owner: owner, name: name, resolver: resolver}
 }
 
 type latestCommitPageFetcher struct {
-	host  string
-	owner string
-	name  string
+	host     string
+	owner    string
+	name     string
+	resolver LatestCommitSHAResolver
 }
 
 func (f latestCommitPageFetcher) Fetch(ctx context.Context, client *http.Client, cookieHeader string, userAgent string) (*RefererPage, error) {
-	sha, err := latestCommitSHAFn(f.host, f.owner, f.name)
+	if f.resolver == nil {
+		return nil, fmt.Errorf("latest commit resolver is required")
+	}
+
+	sha, err := f.resolver.LatestCommitSHA(f.owner, f.name)
 	if err != nil {
 		return nil, err
 	}

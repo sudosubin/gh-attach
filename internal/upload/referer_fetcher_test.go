@@ -11,6 +11,18 @@ import (
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
 
+type stubLatestCommitResolver struct {
+	sha string
+	err error
+}
+
+func (r stubLatestCommitResolver) LatestCommitSHA(owner string, name string) (string, error) {
+	if r.err != nil {
+		return "", r.err
+	}
+	return r.sha, nil
+}
+
 func TestIssueNewPageFetcher_ReturnsNilOnStatusCodeError(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -29,12 +41,6 @@ func TestIssueNewPageFetcher_ReturnsNilOnStatusCodeError(t *testing.T) {
 }
 
 func TestResolveUploadRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
-	orig := latestCommitSHAFn
-	latestCommitSHAFn = func(host string, owner string, name string) (string, error) {
-		return "abc123", nil
-	}
-	defer func() { latestCommitSHAFn = orig }()
-
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/owner/repo/issues/new":
@@ -54,7 +60,7 @@ func TestResolveUploadRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 		host,
 		[]RefererPageFetcher{
 			NewIssueNewPageFetcher(host, "owner/repo"),
-			NewLatestCommitPageFetcher(host, "owner", "repo"),
+			NewLatestCommitPageFetcher(host, "owner", "repo", stubLatestCommitResolver{sha: "abc123"}),
 		},
 		browserprovider.BrowserSession{Browser: cookies.BrowserChromium},
 		server.Client(),
