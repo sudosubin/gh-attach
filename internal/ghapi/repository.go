@@ -3,9 +3,7 @@ package ghapi
 import (
 	"fmt"
 	"strings"
-	"time"
 
-	ghapi "github.com/cli/go-gh/v2/pkg/api"
 	"github.com/cli/go-gh/v2/pkg/repository"
 )
 
@@ -26,7 +24,7 @@ func ResolveRepository(repoArg string) (Repository, error) {
 		return Repository{}, err
 	}
 
-	client, err := ghapi.NewRESTClient(ghapi.ClientOptions{Host: parsed.Host, Timeout: 30 * time.Second})
+	client, err := newRESTClient(parsed.Host)
 	if err != nil {
 		return Repository{}, err
 	}
@@ -57,7 +55,7 @@ func resolveRepositorySpec(repoArg string) (repository.Repository, error) {
 }
 
 func CurrentLogin(host string) (string, error) {
-	client, err := ghapi.NewRESTClient(ghapi.ClientOptions{Host: host, Timeout: 30 * time.Second})
+	client, err := newRESTClient(host)
 	if err != nil {
 		return "", err
 	}
