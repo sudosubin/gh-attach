@@ -3,9 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"strings"
 
@@ -142,7 +139,7 @@ func resolveCookies(
 	for idx, source := range sources {
 		expanded := cookies.ExpandSource(source)
 		for _, candidate := range expanded {
-			candidate = applyDefaultProfile(candidate)
+			candidate = cookies.ApplyDefaultProfile(candidate)
 			attempts++
 
 			provider, ok := providers[candidate.Browser]
@@ -162,7 +159,7 @@ func resolveCookies(
 				continue
 			}
 
-			dotcomUsers := cookieValuesByNameForHost(session.Cookies, "dotcom_user", host)
+			dotcomUsers := cookies.ValuesForHost(session.Cookies, "dotcom_user", host)
 			if len(dotcomUsers) == 0 {
 				if verbose {
 					fmt.Fprintf(os.Stderr, "source[%d]: browser=%s provider=%s skipped (dotcom_user missing)\n", idx, candidate.Browser, backendName)
@@ -186,41 +183,6 @@ func resolveCookies(
 	return browserprovider.BrowserSession{}, cookies.Source{}, "", fmt.Errorf("failed to resolve usable cookie source from %d attempt(s)", attempts)
 }
 
-func cookieValuesByNameForHost(in []*http.Cookie, name string, host string) []string {
-	host = strings.TrimSpace(host)
-	if host == "" {
-		return cookieValuesByName(in, name)
-	}
-
-	u := &url.URL{Scheme: "https", Host: host, Path: "/"}
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		return cookieValuesByName(in, name)
-	}
-	jar.SetCookies(u, in)
-
-	return cookieValuesByName(jar.Cookies(u), name)
-}
-
-func cookieValuesByName(in []*http.Cookie, name string) []string {
-	out := make([]string, 0)
-	seen := make(map[string]struct{})
-	for _, c := range in {
-		if c == nil {
-			continue
-		}
-		if c.Name != name || c.Value == "" {
-			continue
-		}
-		if _, ok := seen[c.Value]; ok {
-			continue
-		}
-		seen[c.Value] = struct{}{}
-		out = append(out, c.Value)
-	}
-	return out
-}
-
 func containsFold(values []string, target string) bool {
 	for _, v := range values {
 		if strings.EqualFold(v, target) {
@@ -230,20 +192,4 @@ func containsFold(values []string, target string) bool {
 	return false
 }
 
-func applyDefaultProfile(source cookies.Source) cookies.Source {
-	if strings.TrimSpace(source.Profile) != "" || strings.TrimSpace(source.CookieStorePath) != "" {
-		return source
-	}
 
-	switch source.Browser {
-	case cookies.BrowserChrome,
-		cookies.BrowserChromium,
-		cookies.BrowserEdge,
-		cookies.BrowserBrave,
-		cookies.BrowserVivaldi,
-		cookies.BrowserOpera:
-		source.Profile = "Default"
-	}
-
-	return source
-}

@@ -64,6 +64,24 @@ func ExpandSource(source Source) []Source {
 	return expanded
 }
 
+func ApplyDefaultProfile(source Source) Source {
+	if strings.TrimSpace(source.Profile) != "" || strings.TrimSpace(source.CookieStorePath) != "" {
+		return source
+	}
+
+	switch source.Browser {
+	case BrowserChrome,
+		BrowserChromium,
+		BrowserEdge,
+		BrowserBrave,
+		BrowserVivaldi,
+		BrowserOpera:
+		source.Profile = "Default"
+	}
+
+	return source
+}
+
 func ParseBrowser(v string) (Browser, error) {
 	b := Browser(strings.ToLower(strings.TrimSpace(v)))
 	if b == "" {

@@ -33,3 +33,40 @@ func TestExpandSource_NonAuto(t *testing.T) {
 		t.Fatalf("browser = %s", expanded[0].Browser)
 	}
 }
+
+func TestApplyDefaultProfile_ChromiumFamily(t *testing.T) {
+	t.Parallel()
+
+	for _, b := range []Browser{
+		BrowserChrome,
+		BrowserChromium,
+		BrowserEdge,
+		BrowserBrave,
+		BrowserVivaldi,
+		BrowserOpera,
+	} {
+		got := ApplyDefaultProfile(Source{Browser: b})
+		if got.Profile != "Default" {
+			t.Fatalf("browser=%s profile=%q, want %q", b, got.Profile, "Default")
+		}
+	}
+}
+
+func TestApplyDefaultProfile_DoesNotOverrideExplicitProfileOrPath(t *testing.T) {
+	t.Parallel()
+
+	withProfile := ApplyDefaultProfile(Source{Browser: BrowserChromium, Profile: "Work"})
+	if withProfile.Profile != "Work" {
+		t.Fatalf("profile=%q, want %q", withProfile.Profile, "Work")
+	}
+
+	withPath := ApplyDefaultProfile(Source{Browser: BrowserChromium, CookieStorePath: "/tmp/Cookies"})
+	if withPath.Profile != "" {
+		t.Fatalf("profile=%q, want empty", withPath.Profile)
+	}
+
+	firefox := ApplyDefaultProfile(Source{Browser: BrowserFirefox})
+	if firefox.Profile != "" {
+		t.Fatalf("firefox profile=%q, want empty", firefox.Profile)
+	}
+}
