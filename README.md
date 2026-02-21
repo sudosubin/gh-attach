@@ -1,5 +1,7 @@
 # gh-attach
 
+![release](https://badgen.net/github/release/sudosubin/gh-attach)
+
 GitHub user attachment upload CLI for `gh` (GitHub CLI).
 
 ## Supported Browser
