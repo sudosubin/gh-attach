@@ -91,7 +91,21 @@ func attachRun(opts *AttachOptions) error {
 		fmt.Fprintf(os.Stderr, "selected source: browser=%s profile=%q cookie_store_path=%q provider=%s\n", selectedSource.Browser, selectedSource.Profile, selectedSource.CookieStorePath, selectedProvider)
 	}
 
-	asset, err := upload.UploadPoliciesAsset(context.Background(), repo.Host, repo.FullName(), repo.ID, opts.FilePath, session)
+	refererPage, err := upload.ResolveUploadRefererPage(
+		context.Background(),
+		repo.Host,
+		[]upload.RefererPageFetcher{
+			upload.NewIssueNewPageFetcher(repo.Host, repo.FullName()),
+			upload.NewLatestCommitPageFetcher(repo.Host, repo.Owner, repo.Name),
+		},
+		session,
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	asset, err := upload.UploadPoliciesAsset(context.Background(), repo.Host, repo.ID, opts.FilePath, refererPage, session)
 	if err != nil {
 		return err
 	}

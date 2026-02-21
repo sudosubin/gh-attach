@@ -46,9 +46,12 @@ var (
 	csrfMetaPattern       = regexp.MustCompile(`<meta[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']`)
 )
 
-func UploadPoliciesAsset(ctx context.Context, host string, repoFullName string, repositoryID int64, filePath string, session browserprovider.BrowserSession) (Asset, error) {
+func UploadPoliciesAsset(ctx context.Context, host string, repositoryID int64, filePath string, refererPage *RefererPage, session browserprovider.BrowserSession) (Asset, error) {
 	if repositoryID <= 0 {
 		return Asset{}, fmt.Errorf("invalid repository id")
+	}
+	if refererPage == nil || strings.TrimSpace(refererPage.URL) == "" {
+		return Asset{}, fmt.Errorf("invalid referer page")
 	}
 
 	fileInfo, err := os.Stat(filePath)
@@ -67,7 +70,8 @@ func UploadPoliciesAsset(ctx context.Context, host string, repoFullName string, 
 
 	client := &http.Client{}
 	baseURL := fmt.Sprintf("https://%s", host)
-	issueNewURL := fmt.Sprintf("%s/%s/issues/new", baseURL, repoFullName)
+	authenticityToken := extractAuthenticityToken(string(refererPage.Body))
+
 	userAgent, err := browserprovider.UserAgentForBrowser(session.Browser)
 	if err != nil {
 		return Asset{}, err
@@ -76,14 +80,12 @@ func UploadPoliciesAsset(ctx context.Context, host string, repoFullName string, 
 		return Asset{}, fmt.Errorf("browser session user-agent mismatch for browser %s", session.Browser)
 	}
 
-	cookieHeader, err := cookieHeaderForURL(session.Cookies, issueNewURL)
+	cookieHeader, err := cookieHeaderForURL(session.Cookies, refererPage.URL)
 	if err != nil {
 		return Asset{}, err
 	}
 
-	authenticityToken, _ := fetchAuthenticityToken(ctx, client, issueNewURL, cookieHeader, userAgent)
-
-	policies, err := requestPolicies(ctx, client, baseURL, cookieHeader, repositoryID, fileName, fileInfo.Size(), contentType, authenticityToken, userAgent)
+	policies, err := requestPolicies(ctx, client, baseURL, refererPage.URL, cookieHeader, repositoryID, fileName, fileInfo.Size(), contentType, authenticityToken, userAgent)
 	if err != nil {
 		return Asset{}, err
 	}
@@ -103,43 +105,18 @@ func UploadPoliciesAsset(ctx context.Context, host string, repoFullName string, 
 	return asset, nil
 }
 
-func fetchAuthenticityToken(ctx context.Context, client *http.Client, pageURL string, cookieHeader string, userAgent string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
-	if err != nil {
-		return "", err
+func extractAuthenticityToken(html string) string {
+	if m := authTokenInputPattern.FindStringSubmatch(html); len(m) > 1 {
+		return m[1]
 	}
-	setDefaultHeaders(req, pageURL)
-	if cookieHeader != "" {
-		setCookieAndUserAgent(req, cookieHeader, userAgent)
+	if m := csrfMetaPattern.FindStringSubmatch(html); len(m) > 1 {
+		return m[1]
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("failed to fetch authenticity token page: %s", resp.Status)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	text := string(body)
-
-	if m := authTokenInputPattern.FindStringSubmatch(text); len(m) > 1 {
-		return m[1], nil
-	}
-	if m := csrfMetaPattern.FindStringSubmatch(text); len(m) > 1 {
-		return m[1], nil
-	}
-
-	return "", fmt.Errorf("authenticity token not found")
+	return ""
 }
 
-func requestPolicies(ctx context.Context, client *http.Client, baseURL string, cookieHeader string, repositoryID int64, fileName string, fileSize int64, contentType string, authenticityToken string, userAgent string) (policiesResponse, error) {
+func requestPolicies(ctx context.Context, client *http.Client, baseURL string, referer string, cookieHeader string, repositoryID int64, fileName string, fileSize int64, contentType string, authenticityToken string, userAgent string) (policiesResponse, error) {
 	payload := &bytes.Buffer{}
 	writer := multipart.NewWriter(payload)
 	_ = writer.WriteField("repository_id", strconv.FormatInt(repositoryID, 10))
@@ -158,7 +135,7 @@ func requestPolicies(ctx context.Context, client *http.Client, baseURL string, c
 	if err != nil {
 		return policiesResponse{}, err
 	}
-	setDefaultHeaders(req, baseURL+"/")
+	setDefaultHeaders(req, referer)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	req.Header.Set("GitHub-Verified-Fetch", "true")
