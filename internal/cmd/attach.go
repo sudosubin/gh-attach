@@ -2,17 +2,12 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/sudosubin/gh-attach/internal/browserprovider"
+	"github.com/sudosubin/gh-attach/internal/attach"
 	"github.com/sudosubin/gh-attach/internal/cmdutil"
-	"github.com/sudosubin/gh-attach/internal/cookies"
 	"github.com/sudosubin/gh-attach/internal/formatting"
-	"github.com/sudosubin/gh-attach/internal/ghapi"
-	"github.com/sudosubin/gh-attach/internal/upload"
 )
 
 type AttachOptions struct {
@@ -56,67 +51,15 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
 func attachRun(opts *AttachOptions) error {
 	ctx := context.Background()
 
-	if _, err := os.Stat(opts.FilePath); err != nil {
-		return fmt.Errorf("file: %w", err)
-	}
-
-	repoSpec, err := ghapi.ResolveRepositorySpec(opts.Repo)
-	if err != nil {
-		return fmt.Errorf("resolve repository spec: %w", err)
-	}
-
-	ghService, err := ghapi.NewService(repoSpec.Host, nil)
-	if err != nil {
-		return fmt.Errorf("init gh api service: %w", err)
-	}
-
-	repo, err := ghService.ResolveRepository(repoSpec.Owner, repoSpec.Name)
-	if err != nil {
-		return fmt.Errorf("resolve repository: %w", err)
-	}
-
-	ghLogin, err := ghService.CurrentLogin()
-	if err != nil {
-		return fmt.Errorf("resolve current login: %w", err)
-	}
-
-	sources, err := cookies.ResolveSources(cookies.ResolveInput{
+	svc := attach.NewService(os.Stderr)
+	asset, err := svc.Run(ctx, attach.Request{
+		FilePath:        opts.FilePath,
+		Repo:            opts.Repo,
 		Browser:         opts.Browser,
 		Profile:         opts.Profile,
 		CookieStorePath: opts.CookieStorePath,
+		Verbose:         opts.Verbose,
 	})
-	if err != nil {
-		return err
-	}
-
-	providers := browserprovider.NewDefaultRegistry()
-
-	session, selectedSource, selectedProvider, err := resolveCookies(ctx, repo.Host, ghLogin, sources, providers, opts.Verbose)
-	if err != nil {
-		return err
-	}
-
-	if opts.Verbose {
-		fmt.Fprintf(os.Stderr, "selected source: browser=%s profile=%q cookie_store_path=%q provider=%s\n", selectedSource.Browser, selectedSource.Profile, selectedSource.CookieStorePath, selectedProvider)
-	}
-
-	uploader, err := upload.NewUploader(repo.Host, repo.ID, session, nil)
-	if err != nil {
-		return fmt.Errorf("init uploader: %w", err)
-	}
-
-	refererPage, err := uploader.ResolveRefererPage(
-		ctx,
-		[]upload.RefererPageFetcher{
-			upload.NewIssueNewPageFetcher(repo.Host, repo.FullName()),
-			upload.NewLatestCommitPageFetcher(repo.Host, repo.Owner, repo.Name, ghService),
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	asset, err := uploader.Upload(ctx, opts.FilePath, refererPage)
 	if err != nil {
 		return err
 	}
@@ -127,69 +70,4 @@ func attachRun(opts *AttachOptions) error {
 		JQ:          opts.JSON.Filter,
 		Template:    opts.JSON.Template,
 	})
-}
-
-func resolveCookies(
-	ctx context.Context,
-	host string,
-	ghLogin string,
-	sources []cookies.Source,
-	providers map[cookies.Browser]browserprovider.BrowserProvider,
-	verbose bool,
-) (browserprovider.BrowserSession, cookies.Source, string, error) {
-	attempts := 0
-	for idx, source := range sources {
-		expanded := cookies.ExpandSource(source)
-		for _, candidate := range expanded {
-			candidate = cookies.ApplyDefaultProfile(candidate)
-			attempts++
-
-			provider, ok := providers[candidate.Browser]
-			if !ok {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "source[%d]: browser=%s provider=none missing\n", idx, candidate.Browser)
-				}
-				continue
-			}
-
-			backendName := provider.BackendName()
-			session, err := provider.Load(ctx, host, candidate)
-			if err != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "source[%d]: browser=%s profile=%q cookie_store_path=%q provider=%s error=%v\n", idx, candidate.Browser, candidate.Profile, candidate.CookieStorePath, backendName, err)
-				}
-				continue
-			}
-
-			dotcomUsers := cookies.ValuesForHost(session.Cookies, "dotcom_user", host)
-			if len(dotcomUsers) == 0 {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "source[%d]: browser=%s provider=%s skipped (dotcom_user missing)\n", idx, candidate.Browser, backendName)
-				}
-				continue
-			}
-			if !containsFold(dotcomUsers, ghLogin) {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "source[%d]: browser=%s provider=%s skipped (dotcom_user=%q != gh_login=%q)\n", idx, candidate.Browser, backendName, strings.Join(dotcomUsers, ","), ghLogin)
-				}
-				continue
-			}
-
-			if verbose {
-				fmt.Fprintf(os.Stderr, "source[%d]: browser=%s provider=%s matched dotcom_user=%q\n", idx, candidate.Browser, backendName, ghLogin)
-			}
-			return session, candidate, backendName, nil
-		}
-	}
-
-	return browserprovider.BrowserSession{}, cookies.Source{}, "", fmt.Errorf("failed to resolve usable cookie source from %d attempt(s)", attempts)
-}
-
-func containsFold(values []string, target string) bool {
-	for _, v := range values {
-		if strings.EqualFold(v, target) {
-			return true
-		}
-	}
-	return false
 }
