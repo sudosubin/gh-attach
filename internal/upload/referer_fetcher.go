@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
-
-	"github.com/sudosubin/gh-attach/internal/browserprovider"
 )
 
+// RefererPage is a GitHub page whose URL and CSRF tokens are used as the upload referer context.
 type RefererPage struct {
 	URL  string
 	Body []byte
@@ -38,7 +36,6 @@ func (f issueNewPageFetcher) Fetch(ctx context.Context, client *http.Client, coo
 	if err != nil || body == nil {
 		return nil, err
 	}
-
 	return &RefererPage{URL: pageURL, Body: body}, nil
 }
 
@@ -68,48 +65,7 @@ func (f latestCommitPageFetcher) Fetch(ctx context.Context, client *http.Client,
 	if err != nil || body == nil {
 		return nil, err
 	}
-
 	return &RefererPage{URL: pageURL, Body: body}, nil
-}
-
-func ResolveUploadRefererPage(ctx context.Context, host string, fetchers []RefererPageFetcher, session browserprovider.BrowserSession, client *http.Client) (*RefererPage, error) {
-	if len(fetchers) == 0 {
-		return nil, fmt.Errorf("no referer page fetchers configured")
-	}
-
-	userAgent, err := browserprovider.UserAgentForBrowser(session.Browser)
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(session.UserAgent) != "" && session.UserAgent != userAgent {
-		return nil, fmt.Errorf("browser session user-agent mismatch for browser %s", session.Browser)
-	}
-
-	cookieHeader, err := cookieHeaderForURL(session.Cookies, fmt.Sprintf("https://%s/", host))
-	if err != nil {
-		return nil, err
-	}
-
-	if client == nil {
-		client = &http.Client{}
-	}
-
-	var lastErr error
-	for _, fetcher := range fetchers {
-		page, err := fetcher.Fetch(ctx, client, cookieHeader, userAgent)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		if page != nil {
-			return page, nil
-		}
-	}
-	if lastErr != nil {
-		return nil, lastErr
-	}
-
-	return nil, fmt.Errorf("failed to resolve accessible referer page")
 }
 
 func fetchPageBody(ctx context.Context, client *http.Client, pageURL string, cookieHeader string, userAgent string) ([]byte, error) {
@@ -136,6 +92,5 @@ func fetchPageBody(ctx context.Context, client *http.Client, pageURL string, coo
 	if err != nil {
 		return nil, err
 	}
-
 	return body, nil
 }

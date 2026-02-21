@@ -101,23 +101,23 @@ func attachRun(opts *AttachOptions) error {
 		fmt.Fprintf(os.Stderr, "selected source: browser=%s profile=%q cookie_store_path=%q provider=%s\n", selectedSource.Browser, selectedSource.Profile, selectedSource.CookieStorePath, selectedProvider)
 	}
 
-	httpClient := &http.Client{}
+	uploader, err := upload.NewUploader(repo.Host, repo.ID, session, nil)
+	if err != nil {
+		return fmt.Errorf("init uploader: %w", err)
+	}
 
-	refererPage, err := upload.ResolveUploadRefererPage(
+	refererPage, err := uploader.ResolveRefererPage(
 		context.Background(),
-		repo.Host,
 		[]upload.RefererPageFetcher{
 			upload.NewIssueNewPageFetcher(repo.Host, repo.FullName()),
 			upload.NewLatestCommitPageFetcher(repo.Host, repo.Owner, repo.Name, ghService),
 		},
-		session,
-		httpClient,
 	)
 	if err != nil {
 		return err
 	}
 
-	asset, err := upload.UploadPoliciesAsset(context.Background(), repo.Host, repo.ID, opts.FilePath, refererPage, session, httpClient)
+	asset, err := uploader.Upload(context.Background(), opts.FilePath, refererPage)
 	if err != nil {
 		return err
 	}

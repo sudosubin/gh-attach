@@ -33,19 +33,17 @@ func TestRequestPolicies_InjectsRefererAndUploadHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := requestPolicies(
-		context.Background(),
-		server.Client(),
-		server.URL,
-		expectedReferer,
-		"",
-		1,
-		"file.txt",
-		12,
-		"text/plain",
-		refererPageMetadata{FetchNonce: expectedFetchNonce, GitHubClientVersion: expectedClientVersion},
-		"",
-	)
+	u := &Uploader{
+		baseURL:      server.URL,
+		repositoryID: 1,
+		client:       server.Client(),
+	}
+	refererPage := &RefererPage{
+		URL:  expectedReferer,
+		Body: []byte(`<meta name="fetch-nonce" content="nonce-123"><meta name="release" content="1.2.3">`),
+	}
+
+	_, err := u.requestPolicies(context.Background(), refererPage, "file.txt", 12, "text/plain")
 	if err != nil {
 		t.Fatalf("requestPolicies() error = %v", err)
 	}
@@ -78,19 +76,17 @@ func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.
 	}))
 	defer server.Close()
 
-	_, err := requestPolicies(
-		context.Background(),
-		server.Client(),
-		server.URL,
-		"https://github.com/owner/repo/issues/new",
-		"",
-		1,
-		"file.txt",
-		12,
-		"text/plain",
-		refererPageMetadata{},
-		"",
-	)
+	u := &Uploader{
+		baseURL:      server.URL,
+		repositoryID: 1,
+		client:       server.Client(),
+	}
+	refererPage := &RefererPage{
+		URL:  "https://github.com/owner/repo/issues/new",
+		Body: []byte{},
+	}
+
+	_, err := u.requestPolicies(context.Background(), refererPage, "file.txt", 12, "text/plain")
 	if err != nil {
 		t.Fatalf("requestPolicies() error = %v", err)
 	}

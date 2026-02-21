@@ -40,7 +40,7 @@ func TestIssueNewPageFetcher_ReturnsNilOnStatusCodeError(t *testing.T) {
 	}
 }
 
-func TestResolveUploadRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
+func TestResolveRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/owner/repo/issues/new":
@@ -55,18 +55,20 @@ func TestResolveUploadRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 	defer server.Close()
 
 	host := mustHost(t, server.URL)
-	refererPage, err := ResolveUploadRefererPage(
+	uploader, err := NewUploader(host, 1, browserprovider.BrowserSession{Browser: cookies.BrowserChromium}, server.Client())
+	if err != nil {
+		t.Fatalf("NewUploader() error = %v", err)
+	}
+
+	refererPage, err := uploader.ResolveRefererPage(
 		context.Background(),
-		host,
 		[]RefererPageFetcher{
 			NewIssueNewPageFetcher(host, "owner/repo"),
 			NewLatestCommitPageFetcher(host, "owner", "repo", stubLatestCommitResolver{sha: "abc123"}),
 		},
-		browserprovider.BrowserSession{Browser: cookies.BrowserChromium},
-		server.Client(),
 	)
 	if err != nil {
-		t.Fatalf("ResolveUploadRefererPage() error = %v", err)
+		t.Fatalf("ResolveRefererPage() error = %v", err)
 	}
 	if refererPage.URL != "https://"+host+"/owner/repo/commit/abc123" {
 		t.Fatalf("refererPage.URL = %q", refererPage.URL)
@@ -87,19 +89,21 @@ func (f *stubRefererPageFetcher) Fetch(ctx context.Context, client *http.Client,
 	return f.page, f.err
 }
 
-func TestResolveUploadRefererPage_EarlyReturnsOnFirstSuccess(t *testing.T) {
+func TestResolveRefererPage_EarlyReturnsOnFirstSuccess(t *testing.T) {
 	first := &stubRefererPageFetcher{page: &RefererPage{URL: "https://github.com/owner/repo/issues/new", Body: []byte("ok")}}
 	second := &stubRefererPageFetcher{page: &RefererPage{URL: "https://github.com/owner/repo/commit/abc123", Body: []byte("ok")}}
 
-	resolved, err := ResolveUploadRefererPage(
+	uploader, err := NewUploader("github.com", 1, browserprovider.BrowserSession{Browser: cookies.BrowserChromium}, nil)
+	if err != nil {
+		t.Fatalf("NewUploader() error = %v", err)
+	}
+
+	resolved, err := uploader.ResolveRefererPage(
 		context.Background(),
-		"github.com",
 		[]RefererPageFetcher{first, second},
-		browserprovider.BrowserSession{Browser: cookies.BrowserChromium},
-		nil,
 	)
 	if err != nil {
-		t.Fatalf("ResolveUploadRefererPage() error = %v", err)
+		t.Fatalf("ResolveRefererPage() error = %v", err)
 	}
 	if resolved.URL != first.page.URL {
 		t.Fatalf("resolved.URL = %q, want %q", resolved.URL, first.page.URL)
