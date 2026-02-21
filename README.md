@@ -4,6 +4,32 @@
 
 GitHub user attachment upload CLI for `gh` (GitHub CLI).
 
+## Installation
+
+### Homebrew (Cask)
+
+```sh
+brew tap sudosubin/gh-attach
+brew install --cask gh-attach
+```
+
+Or one-line install:
+
+```sh
+brew install --cask sudosubin/gh-attach/gh-attach
+```
+
+### Download from GitHub Releases
+
+Open the [latest release](https://github.com/sudosubin/gh-attach/releases/latest) page, and download the artifact matching your OS/CPU.
+
+## How it works
+
+- It first resolves the target repository (`owner/repo`) and the current GitHub login via the `gh` API.
+- Based on CLI flags or config file, it looks up browser cookie sources and selects a session whose [`dotcom_user`](https://docs.github.com/en/site-policy/privacy-policies/github-cookies#cookies) matches the current login.
+- Using that session cookie, it requests GitHub upload policies (`/upload/policies/assets`) and uploads the file binary.
+- It finalizes the user-attachments asset and prints the result as a URL or formatted output via `--json`.
+
 ## Supported Browser
 
 - Chromium Family (Chrome, Chromium, Edge, Brave, Vivaldi, Opera)
@@ -12,7 +38,7 @@ GitHub user attachment upload CLI for `gh` (GitHub CLI).
 
 ## Usage
 
-```bash
+```sh
 $ gh attach ./image.png -R owner/repo
 https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
 
