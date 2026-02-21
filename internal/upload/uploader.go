@@ -34,11 +34,6 @@ func NewUploader(host string, repositoryID int64, session browserprovider.Browse
 		return nil, fmt.Errorf("invalid repository id")
 	}
 
-	userAgent, err := browserprovider.UserAgentForBrowser(session.Browser)
-	if err != nil {
-		return nil, err
-	}
-
 	cookieHeader, err := cookieHeaderForURL(session.Cookies, "https://"+host+"/")
 	if err != nil {
 		return nil, err
@@ -52,7 +47,7 @@ func NewUploader(host string, repositoryID int64, session browserprovider.Browse
 		baseURL:      "https://" + host,
 		repositoryID: repositoryID,
 		client:       client,
-		userAgent:    userAgent,
+		userAgent:    session.UserAgent,
 		cookieHeader: cookieHeader,
 	}, nil
 }

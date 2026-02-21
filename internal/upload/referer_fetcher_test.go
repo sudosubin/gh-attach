@@ -55,7 +55,7 @@ func TestResolveRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 	defer server.Close()
 
 	host := mustHost(t, server.URL)
-	uploader, err := NewUploader(host, 1, browserprovider.BrowserSession{Browser: cookies.BrowserChromium}, server.Client())
+	uploader, err := NewUploader(host, 1, browserprovider.BrowserSession{Browser: cookies.BrowserChromium, UserAgent: "test-agent"}, server.Client())
 	if err != nil {
 		t.Fatalf("NewUploader() error = %v", err)
 	}
@@ -93,7 +93,7 @@ func TestResolveRefererPage_EarlyReturnsOnFirstSuccess(t *testing.T) {
 	first := &stubRefererPageFetcher{page: &RefererPage{URL: "https://github.com/owner/repo/issues/new", Body: []byte("ok")}}
 	second := &stubRefererPageFetcher{page: &RefererPage{URL: "https://github.com/owner/repo/commit/abc123", Body: []byte("ok")}}
 
-	uploader, err := NewUploader("github.com", 1, browserprovider.BrowserSession{Browser: cookies.BrowserChromium}, nil)
+	uploader, err := NewUploader("github.com", 1, browserprovider.BrowserSession{Browser: cookies.BrowserChromium, UserAgent: "test-agent"}, nil)
 	if err != nil {
 		t.Fatalf("NewUploader() error = %v", err)
 	}
