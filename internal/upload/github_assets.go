@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	ghapi "github.com/cli/go-gh/v2/pkg/api"
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
 )
 
@@ -172,12 +173,13 @@ func requestPolicies(ctx context.Context, client *http.Client, baseURL string, c
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return policiesResponse{}, ghapi.HandleHTTPError(resp)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return policiesResponse{}, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return policiesResponse{}, fmt.Errorf("policies request failed: %s: %s", resp.Status, string(body))
 	}
 
 	var out policiesResponse
@@ -239,8 +241,7 @@ func uploadBinary(ctx context.Context, client *http.Client, filePath string, con
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("binary upload failed: %s: %s", resp.Status, string(body))
+		return ghapi.HandleHTTPError(resp)
 	}
 	return nil
 }
@@ -279,12 +280,13 @@ func finalizeAsset(ctx context.Context, client *http.Client, baseURL string, coo
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return Asset{}, ghapi.HandleHTTPError(resp)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return Asset{}, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Asset{}, fmt.Errorf("asset finalize failed: %s: %s", resp.Status, string(body))
 	}
 
 	var asset Asset
