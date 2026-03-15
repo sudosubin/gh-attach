@@ -28,7 +28,9 @@ archives:
   - id: gh-attach
     builds:
       - gh-attach
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - binary
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
 
 checksum:
   name_template: "{{ .ProjectName }}_checksums.txt"

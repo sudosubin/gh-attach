@@ -7,11 +7,25 @@ GitHub user attachment upload CLI for `gh` (GitHub CLI).
 ## Quick Start
 
 ```sh
-brew install --cask sudosubin/gh-attach/gh-attach
+gh extension install sudosubin/gh-attach
 gh attach ./image.png -R owner/repo
 ```
 
 ## Installation
+
+### GitHub CLI Extension
+
+```sh
+gh extension install sudosubin/gh-attach
+gh attach ./image.png -R owner/repo
+```
+
+For local development:
+
+```sh
+go build -o gh-attach ./cmd/gh-attach
+gh extension install .
+```
 
 ### Homebrew (Cask)
 
