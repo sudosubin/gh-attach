@@ -10,7 +10,7 @@
 GitHub user attachment upload CLI for `gh` (GitHub CLI).
 
 <a href="docs/gh-attach.mp4">
-  <img src="docs/gh-attach.webp" alt="gh-attach demo" width="900" />
+  <img src="docs/gh-attach.webp" alt="gh-attach demo" width="800" />
 </a>
 
 </div>
