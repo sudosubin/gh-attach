@@ -1,8 +1,19 @@
+<div align="center">
+
 # gh-attach
 
-![release](https://badgen.net/github/release/sudosubin/gh-attach)
+[![Release](https://img.shields.io/github/v/release/sudosubin/gh-attach?sort=semver)](https://github.com/sudosubin/gh-attach/releases/latest)
+[![Go](https://img.shields.io/badge/go-1.25+-00ADD8?logo=go)](https://go.dev/)
+[![License](https://img.shields.io/github/license/sudosubin/gh-attach)](./LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/sudosubin/gh-attach/total)](https://github.com/sudosubin/gh-attach/releases)
 
 GitHub user attachment upload CLI for `gh` (GitHub CLI).
+
+<a href="docs/gh-attach.mp4">
+  <img src="docs/gh-attach.webp" alt="gh-attach demo" width="900" />
+</a>
+
+</div>
 
 ## Quick Start
 
