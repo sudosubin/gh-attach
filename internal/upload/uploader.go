@@ -99,16 +99,24 @@ func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *Ref
 		return Asset{}, err
 	}
 
-	if err := u.uploadBinary(ctx, filePath, contentType, policies); err != nil {
+	uploadedAsset, err := u.uploadBinary(ctx, filePath, contentType, policies)
+	if err != nil {
 		return Asset{}, err
 	}
 
 	asset, err := u.finalizeAsset(ctx, policies)
 	if err != nil {
+		if uploadedAsset.Href != "" {
+			return uploadedAsset, nil
+		}
 		if policies.Asset.Href != "" {
 			return policies.Asset, nil
 		}
 		return Asset{}, err
+	}
+
+	if asset.Href == "" && uploadedAsset.Href != "" {
+		return uploadedAsset, nil
 	}
 
 	return asset, nil
@@ -174,10 +182,10 @@ func (u *Uploader) requestPolicies(ctx context.Context, refererPage *RefererPage
 	return out, nil
 }
 
-func (u *Uploader) uploadBinary(ctx context.Context, filePath string, contentType string, policies policiesResponse) error {
+func (u *Uploader) uploadBinary(ctx context.Context, filePath string, contentType string, policies policiesResponse) (Asset, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return err
+		return Asset{}, err
 	}
 	defer file.Close()
 
@@ -189,18 +197,18 @@ func (u *Uploader) uploadBinary(ctx context.Context, filePath string, contentTyp
 
 	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
 	if err != nil {
-		return err
+		return Asset{}, err
 	}
 	if _, err := io.Copy(part, file); err != nil {
-		return err
+		return Asset{}, err
 	}
 	if err := writer.Close(); err != nil {
-		return err
+		return Asset{}, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, policies.UploadURL, payload)
 	if err != nil {
-		return err
+		return Asset{}, err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	if contentType != "" {
@@ -218,14 +226,24 @@ func (u *Uploader) uploadBinary(ctx context.Context, filePath string, contentTyp
 
 	resp, err := u.client.Do(req)
 	if err != nil {
-		return err
+		return Asset{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return ghapi.HandleHTTPError(resp)
+		return Asset{}, ghapi.HandleHTTPError(resp)
 	}
-	return nil
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil || len(body) == 0 {
+		return Asset{}, nil
+	}
+
+	var asset Asset
+	if err := json.Unmarshal(body, &asset); err != nil {
+		return Asset{}, nil
+	}
+	return asset, nil
 }
 
 func (u *Uploader) finalizeAsset(ctx context.Context, policies policiesResponse) (Asset, error) {
