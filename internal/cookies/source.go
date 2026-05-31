@@ -92,3 +92,45 @@ func ParseBrowser(v string) (Browser, error) {
 	}
 	return b, nil
 }
+
+// ProfileSelector is parsed from "<profile>[:<container-selector>]".
+// Container selector formats:
+//
+//	""       — no container filter
+//	"<name>" — match container name
+//	"id=<N>" — match container id
+type ProfileSelector struct {
+	Profile   string
+	Container string
+	MatchByID bool
+}
+
+const profileContainerIDPrefix = "id="
+
+// ParseProfileSelector splits on the first ':' only.
+func ParseProfileSelector(s string) ProfileSelector {
+	s = strings.TrimSpace(s)
+	profile, container, hasContainer := strings.Cut(s, ":")
+	if !hasContainer {
+		return ProfileSelector{Profile: profile}
+	}
+	if v, ok := strings.CutPrefix(container, profileContainerIDPrefix); ok {
+		return ProfileSelector{Profile: profile, Container: v, MatchByID: true}
+	}
+	return ProfileSelector{Profile: profile, Container: container}
+}
+
+// FormatProfileSelector builds the profile identifier.
+//
+//	(profile, "",     _)     -> "profile"
+//	(profile, "name", false) -> "profile:name"
+//	(profile, "N",    true)  -> "profile:id=N"
+func FormatProfileSelector(profile, container string, byID bool) string {
+	if container == "" {
+		return profile
+	}
+	if byID {
+		return profile + ":" + profileContainerIDPrefix + container
+	}
+	return profile + ":" + container
+}
