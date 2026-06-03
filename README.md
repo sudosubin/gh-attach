@@ -75,7 +75,7 @@ image.png -> https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-
 
 - `-R, --repo <[HOST/]OWNER/REPO>`: Target repository. Auto detection is available from current repository.
 - `--browser <name>`: Browser to read cookies from (`auto|chrome|chromium|edge|firefox|safari|brave|vivaldi|opera`).
-- `--profile <name-or-path>`: Browser profile name/path.
+- `--profile <name-or-path>`: Browser profile name/path. For Firefox multi-account containers, append `:<container-name>` or `:id=<container-id>` to pin a specific container (e.g. `default:Work`, `default:id=2`).
 - `--cookie-store-path <path>`: Explicit cookie DB file path.
 - `--json <fields>`: Output JSON with selected fields.
 - `-q, --jq <expression>`: Apply jq filter to JSON output (requires `--json`).

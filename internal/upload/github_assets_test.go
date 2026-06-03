@@ -1,9 +1,9 @@
 package upload
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -43,7 +43,7 @@ func TestRequestPolicies_InjectsRefererAndUploadHeaders(t *testing.T) {
 		Body: []byte(`<meta name="fetch-nonce" content="nonce-123"><meta name="release" content="1.2.3">`),
 	}
 
-	_, err := u.requestPolicies(context.Background(), refererPage, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicies(t.Context(), refererPage, "file.txt", 12, "text/plain")
 	if err != nil {
 		t.Fatalf("requestPolicies() error = %v", err)
 	}
@@ -86,7 +86,7 @@ func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.
 		Body: []byte{},
 	}
 
-	_, err := u.requestPolicies(context.Background(), refererPage, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicies(t.Context(), refererPage, "file.txt", 12, "text/plain")
 	if err != nil {
 		t.Fatalf("requestPolicies() error = %v", err)
 	}
@@ -95,6 +95,60 @@ func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.
 	}
 	if receivedClientVersion != "" {
 		t.Fatalf("X-GitHub-Client-Version = %q, want empty", receivedClientVersion)
+	}
+}
+
+func TestCookieHeaderForURL_DeduplicatesKeysLastWins(t *testing.T) {
+	t.Parallel()
+
+	// Duplicate keys (e.g. kooky folding dFPI cookies into the default container) collapse last-wins instead of failing.
+	dupes := []*http.Cookie{
+		{Name: "user_session", Value: "stale", Domain: "github.com", Path: "/"},
+		{Name: "user_session", Value: "current", Domain: "github.com", Path: "/"},
+	}
+
+	got, err := cookieHeaderForURL(dupes, "https://github.com/")
+	if err != nil {
+		t.Fatalf("cookieHeaderForURL() error = %v, want nil", err)
+	}
+	if got != "user_session=current" {
+		t.Fatalf("header = %q, want user_session=current", got)
+	}
+}
+
+func TestCookieHeaderForURL_AcceptsHostOnlyAndDomainScopes(t *testing.T) {
+	t.Parallel()
+
+	// Host-only (github.com) and domain (.github.com) are distinct RFC 6265
+	// scopes that can both live in one container, so this is not a leak.
+	in := []*http.Cookie{
+		{Name: "user_session", Value: "host-only", Domain: "github.com", Path: "/"},
+		{Name: "user_session", Value: "domain", Domain: ".github.com", Path: "/"},
+	}
+
+	got, err := cookieHeaderForURL(in, "https://github.com/")
+	if err != nil {
+		t.Fatalf("cookieHeaderForURL() error = %v, want nil", err)
+	}
+	if !strings.Contains(got, "user_session=") {
+		t.Fatalf("header = %q, want a user_session cookie", got)
+	}
+}
+
+func TestCookieHeaderForURL_AcceptsDistinctKeys(t *testing.T) {
+	t.Parallel()
+
+	in := []*http.Cookie{
+		{Name: "dotcom_user", Value: "octocat", Domain: "github.com", Path: "/"},
+		{Name: "user_session", Value: "abc", Domain: "github.com", Path: "/"},
+	}
+
+	got, err := cookieHeaderForURL(in, "https://github.com/")
+	if err != nil {
+		t.Fatalf("cookieHeaderForURL() error = %v", err)
+	}
+	if !strings.Contains(got, "dotcom_user=octocat") || !strings.Contains(got, "user_session=abc") {
+		t.Fatalf("header = %q, missing expected cookies", got)
 	}
 }
 

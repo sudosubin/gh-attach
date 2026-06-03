@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -57,19 +58,19 @@ func (u *Uploader) ResolveRefererPage(ctx context.Context, fetchers []RefererPag
 		return nil, fmt.Errorf("no referer page fetchers configured")
 	}
 
-	var lastErr error
+	var errs []error
 	for _, fetcher := range fetchers {
 		page, err := fetcher.Fetch(ctx, u.client, u.cookieHeader, u.userAgent)
 		if err != nil {
-			lastErr = err
+			errs = append(errs, err)
 			continue
 		}
 		if page != nil {
 			return page, nil
 		}
 	}
-	if lastErr != nil {
-		return nil, lastErr
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
 	}
 
 	return nil, fmt.Errorf("failed to resolve accessible referer page")
@@ -305,13 +306,27 @@ func cookieHeaderForURL(cookies []*http.Cookie, rawURL string) (string, error) {
 		return "", err
 	}
 
+	// Collapse duplicate (Name, Domain, Path) keys last-wins; Firefox folds dFPI/private-browsing cookies into the default container.
+	type cookieKey struct{ name, domain, path string }
+	index := map[cookieKey]int{}
+	deduped := make([]*http.Cookie, 0, len(cookies))
+	for _, c := range cookies {
+		key := cookieKey{c.Name, c.Domain, c.Path}
+		if i, ok := index[key]; ok {
+			deduped[i] = c
+			continue
+		}
+		index[key] = len(deduped)
+		deduped = append(deduped, c)
+	}
+
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return "", err
 	}
-	jar.SetCookies(u, cookies)
+	jar.SetCookies(u, deduped)
 
-	pairs := make([]string, 0)
+	pairs := make([]string, 0, len(deduped))
 	for _, c := range jar.Cookies(u) {
 		pairs = append(pairs, c.Name+"="+c.Value)
 	}

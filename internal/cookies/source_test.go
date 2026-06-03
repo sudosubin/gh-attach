@@ -70,3 +70,79 @@ func TestApplyDefaultProfile_DoesNotOverrideExplicitProfileOrPath(t *testing.T) 
 		t.Fatalf("firefox profile=%q, want empty", firefox.Profile)
 	}
 }
+
+func TestParseProfileSelector(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		in   string
+		want ProfileSelector
+	}{
+		{"empty", "", ProfileSelector{}},
+		{"profile only", "default", ProfileSelector{Profile: "default"}},
+		{"profile + name", "default:Work", ProfileSelector{Profile: "default", Container: "Work"}},
+		{"profile + id", "default:id=2", ProfileSelector{Profile: "default", Container: "2", MatchByID: true}},
+		{"profile + name with email-like value", "default:sudosubin@example.com", ProfileSelector{Profile: "default", Container: "sudosubin@example.com"}},
+		{"empty profile + name", ":Work", ProfileSelector{Profile: "", Container: "Work"}},
+		{"profile with empty container suffix", "default:", ProfileSelector{Profile: "default"}},
+		{"profile + name containing colon", "default:scope:value", ProfileSelector{Profile: "default", Container: "scope:value"}},
+		{"trims surrounding whitespace", "  default:Work  ", ProfileSelector{Profile: "default", Container: "Work"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseProfileSelector(tc.in)
+			if got != tc.want {
+				t.Fatalf("ParseProfileSelector(%q) = %+v, want %+v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFormatProfileSelector(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		profile   string
+		container string
+		byID      bool
+		want      string
+	}{
+		{"profile only", "default", "", false, "default"},
+		{"profile only with byID ignored", "default", "", true, "default"},
+		{"profile + name", "default", "Work", false, "default:Work"},
+		{"profile + id", "default", "2", true, "default:id=2"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := FormatProfileSelector(tc.profile, tc.container, tc.byID)
+			if got != tc.want {
+				t.Fatalf("FormatProfileSelector(%q,%q,%v) = %q, want %q", tc.profile, tc.container, tc.byID, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestProfileSelectorRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		"default",
+		"default:Work",
+		"default:id=2",
+		"default:sudosubin@example.com",
+	}
+
+	for _, in := range cases {
+		t.Run(in, func(t *testing.T) {
+			sel := ParseProfileSelector(in)
+			got := FormatProfileSelector(sel.Profile, sel.Container, sel.MatchByID)
+			if got != in {
+				t.Fatalf("round-trip %q -> %q", in, got)
+			}
+		})
+	}
+}

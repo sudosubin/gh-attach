@@ -1,6 +1,7 @@
 package browserprovider
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -20,7 +21,7 @@ func (b *sweetcookieBackend) Name() string {
 	return "sweetcookie"
 }
 
-func (b *sweetcookieBackend) Load(ctx context.Context, host string, source cookies.Source) ([]*http.Cookie, error) {
+func (b *sweetcookieBackend) Load(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
 	scBrowser, err := toSweetcookieBrowser(source.Browser)
 	if err != nil {
 		return nil, err
@@ -33,10 +34,7 @@ func (b *sweetcookieBackend) Load(ctx context.Context, host string, source cooki
 		Timeout:  30 * time.Second,
 	}
 
-	override := source.Profile
-	if source.CookieStorePath != "" {
-		override = source.CookieStorePath
-	}
+	override := cmp.Or(source.CookieStorePath, source.Profile)
 	if override != "" {
 		opts.Profiles = map[libsweetcookie.Browser]string{scBrowser: override}
 	}
@@ -65,7 +63,7 @@ func (b *sweetcookieBackend) Load(ctx context.Context, host string, source cooki
 		out = append(out, hc)
 	}
 
-	return out, nil
+	return []CookieSet{{Profile: source.Profile, Cookies: out}}, nil
 }
 
 func toSweetcookieBrowser(browser cookies.Browser) (libsweetcookie.Browser, error) {
