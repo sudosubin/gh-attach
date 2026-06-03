@@ -306,25 +306,27 @@ func cookieHeaderForURL(cookies []*http.Cookie, rawURL string) (string, error) {
 		return "", err
 	}
 
-	// A duplicate (Name, Domain, Path) means two containers were merged. Don't
-	// normalize Domain — github.com and .github.com are distinct, valid scopes.
+	// Collapse duplicate (Name, Domain, Path) keys last-wins; Firefox folds dFPI/private-browsing cookies into the default container.
 	type cookieKey struct{ name, domain, path string }
-	seen := map[cookieKey]struct{}{}
+	index := map[cookieKey]int{}
+	deduped := make([]*http.Cookie, 0, len(cookies))
 	for _, c := range cookies {
 		key := cookieKey{c.Name, c.Domain, c.Path}
-		if _, dup := seen[key]; dup {
-			return "", fmt.Errorf("duplicate cookie %q for %s%s — container isolation may have failed", c.Name, c.Domain, c.Path)
+		if i, ok := index[key]; ok {
+			deduped[i] = c
+			continue
 		}
-		seen[key] = struct{}{}
+		index[key] = len(deduped)
+		deduped = append(deduped, c)
 	}
 
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return "", err
 	}
-	jar.SetCookies(u, cookies)
+	jar.SetCookies(u, deduped)
 
-	pairs := make([]string, 0, len(cookies))
+	pairs := make([]string, 0, len(deduped))
 	for _, c := range jar.Cookies(u) {
 		pairs = append(pairs, c.Name+"="+c.Value)
 	}

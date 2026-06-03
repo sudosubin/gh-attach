@@ -98,20 +98,21 @@ func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.
 	}
 }
 
-func TestCookieHeaderForURL_RejectsDuplicateKeys(t *testing.T) {
+func TestCookieHeaderForURL_DeduplicatesKeysLastWins(t *testing.T) {
 	t.Parallel()
 
+	// Duplicate keys (e.g. kooky folding dFPI cookies into the default container) collapse last-wins instead of failing.
 	dupes := []*http.Cookie{
-		{Name: "user_session", Value: "from-container-1", Domain: "github.com", Path: "/"},
-		{Name: "user_session", Value: "from-container-2", Domain: "github.com", Path: "/"},
+		{Name: "user_session", Value: "stale", Domain: "github.com", Path: "/"},
+		{Name: "user_session", Value: "current", Domain: "github.com", Path: "/"},
 	}
 
-	_, err := cookieHeaderForURL(dupes, "https://github.com/")
-	if err == nil {
-		t.Fatalf("expected error, got nil")
+	got, err := cookieHeaderForURL(dupes, "https://github.com/")
+	if err != nil {
+		t.Fatalf("cookieHeaderForURL() error = %v, want nil", err)
 	}
-	if !strings.Contains(err.Error(), "duplicate cookie") {
-		t.Fatalf("error = %v, want it to mention duplicate cookie", err)
+	if got != "user_session=current" {
+		t.Fatalf("header = %q, want user_session=current", got)
 	}
 }
 
