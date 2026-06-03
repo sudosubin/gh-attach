@@ -115,20 +115,22 @@ func TestCookieHeaderForURL_RejectsDuplicateKeys(t *testing.T) {
 	}
 }
 
-func TestCookieHeaderForURL_RejectsDuplicateKeysAcrossDomainPrefix(t *testing.T) {
+func TestCookieHeaderForURL_AcceptsHostOnlyAndDomainScopes(t *testing.T) {
 	t.Parallel()
 
-	dupes := []*http.Cookie{
-		{Name: "user_session", Value: "from-container-1", Domain: "github.com", Path: "/"},
-		{Name: "user_session", Value: "from-container-2", Domain: ".github.com", Path: "/"},
+	// Host-only (github.com) and domain (.github.com) are distinct RFC 6265
+	// scopes that can both live in one container, so this is not a leak.
+	in := []*http.Cookie{
+		{Name: "user_session", Value: "host-only", Domain: "github.com", Path: "/"},
+		{Name: "user_session", Value: "domain", Domain: ".github.com", Path: "/"},
 	}
 
-	_, err := cookieHeaderForURL(dupes, "https://github.com/")
-	if err == nil {
-		t.Fatalf("expected error, got nil")
+	got, err := cookieHeaderForURL(in, "https://github.com/")
+	if err != nil {
+		t.Fatalf("cookieHeaderForURL() error = %v, want nil", err)
 	}
-	if !strings.Contains(err.Error(), "duplicate cookie") {
-		t.Fatalf("error = %v, want it to mention duplicate cookie", err)
+	if !strings.Contains(got, "user_session=") {
+		t.Fatalf("header = %q, want a user_session cookie", got)
 	}
 }
 
