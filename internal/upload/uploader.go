@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -57,19 +58,19 @@ func (u *Uploader) ResolveRefererPage(ctx context.Context, fetchers []RefererPag
 		return nil, fmt.Errorf("no referer page fetchers configured")
 	}
 
-	var lastErr error
+	var errs []error
 	for _, fetcher := range fetchers {
 		page, err := fetcher.Fetch(ctx, u.client, u.cookieHeader, u.userAgent)
 		if err != nil {
-			lastErr = err
+			errs = append(errs, err)
 			continue
 		}
 		if page != nil {
 			return page, nil
 		}
 	}
-	if lastErr != nil {
-		return nil, lastErr
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
 	}
 
 	return nil, fmt.Errorf("failed to resolve accessible referer page")
@@ -323,7 +324,7 @@ func cookieHeaderForURL(cookies []*http.Cookie, rawURL string) (string, error) {
 	}
 	jar.SetCookies(u, cookies)
 
-	pairs := make([]string, 0)
+	pairs := make([]string, 0, len(cookies))
 	for _, c := range jar.Cookies(u) {
 		pairs = append(pairs, c.Name+"="+c.Value)
 	}

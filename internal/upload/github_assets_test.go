@@ -1,7 +1,6 @@
 package upload
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -44,7 +43,7 @@ func TestRequestPolicies_InjectsRefererAndUploadHeaders(t *testing.T) {
 		Body: []byte(`<meta name="fetch-nonce" content="nonce-123"><meta name="release" content="1.2.3">`),
 	}
 
-	_, err := u.requestPolicies(context.Background(), refererPage, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicies(t.Context(), refererPage, "file.txt", 12, "text/plain")
 	if err != nil {
 		t.Fatalf("requestPolicies() error = %v", err)
 	}
@@ -87,7 +86,7 @@ func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.
 		Body: []byte{},
 	}
 
-	_, err := u.requestPolicies(context.Background(), refererPage, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicies(t.Context(), refererPage, "file.txt", 12, "text/plain")
 	if err != nil {
 		t.Fatalf("requestPolicies() error = %v", err)
 	}

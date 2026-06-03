@@ -1,6 +1,7 @@
 package browserprovider
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -33,10 +34,7 @@ func (b *sweetcookieBackend) Load(ctx context.Context, host string, source cooki
 		Timeout:  30 * time.Second,
 	}
 
-	override := source.Profile
-	if source.CookieStorePath != "" {
-		override = source.CookieStorePath
-	}
+	override := cmp.Or(source.CookieStorePath, source.Profile)
 	if override != "" {
 		opts.Profiles = map[libsweetcookie.Browser]string{scBrowser: override}
 	}

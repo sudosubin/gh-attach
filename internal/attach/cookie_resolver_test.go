@@ -51,7 +51,7 @@ func TestCookieResolver_MatchesAnyDotcomUserValue(t *testing.T) {
 	}
 
 	resolver := NewCookieResolver(providers, false, nil)
-	resolved, err := resolver.Resolve(context.Background(), "github.com", "sudosubin", sources)
+	resolved, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -79,7 +79,7 @@ func TestCookieResolver_SkipsOnMissingDotcomUser(t *testing.T) {
 	}
 
 	resolver := NewCookieResolver(providers, false, nil)
-	_, err := resolver.Resolve(context.Background(), "github.com", "sudosubin", sources)
+	_, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
 	if err == nil {
 		t.Fatalf("Resolve() error = nil, want non-nil")
 	}
@@ -101,7 +101,7 @@ func TestCookieResolver_SkipsOnLoginMismatch(t *testing.T) {
 	}
 
 	resolver := NewCookieResolver(providers, false, nil)
-	_, err := resolver.Resolve(context.Background(), "github.com", "sudosubin", sources)
+	_, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
 	if err == nil {
 		t.Fatalf("Resolve() error = nil, want non-nil")
 	}
@@ -120,7 +120,7 @@ func TestCookieResolver_SkipsMissingProvider(t *testing.T) {
 	}
 
 	resolver := NewCookieResolver(providers, false, nil)
-	_, err := resolver.Resolve(context.Background(), "github.com", "sudosubin", sources)
+	_, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
 	if err == nil {
 		t.Fatalf("Resolve() error = nil, want non-nil")
 	}
@@ -142,7 +142,7 @@ func TestCookieResolver_LoginMatchIsCaseInsensitive(t *testing.T) {
 	}
 
 	resolver := NewCookieResolver(providers, false, nil)
-	resolved, err := resolver.Resolve(context.Background(), "github.com", "sudosubin", sources)
+	resolved, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -182,7 +182,7 @@ func TestCookieResolver_PicksMatchingContainerSessionAndIsolatesCookies(t *testi
 	}
 
 	resolver := NewCookieResolver(providers, false, nil)
-	resolved, err := resolver.Resolve(context.Background(), "github.com", "octocat", sources)
+	resolved, err := resolver.Resolve(t.Context(), "github.com", "octocat", sources)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}

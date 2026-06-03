@@ -2,7 +2,7 @@ package browserprovider
 
 import (
 	"net/http"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -150,7 +150,7 @@ func TestFinalizeKookyGroups_SplitsByContainerAndSortsDeterministically(t *testi
 	for _, s := range sets {
 		gotProfiles = append(gotProfiles, s.Profile)
 	}
-	if !reflect.DeepEqual(gotProfiles, wantProfiles) {
+	if !slices.Equal(gotProfiles, wantProfiles) {
 		t.Fatalf("set profiles = %v, want %v", gotProfiles, wantProfiles)
 	}
 
@@ -174,10 +174,10 @@ func TestCompareContainerID(t *testing.T) {
 		want int
 	}{
 		{"1", "2", -1},
-		{"2", "10", -1},  // numeric, not lex
-		{"10", "2", 1},   // numeric, not lex
+		{"2", "10", -1}, // numeric, not lex
+		{"10", "2", 1},  // numeric, not lex
 		{"2", "2", 0},
-		{"abc", "abd", -1},               // both non-numeric → lex
+		{"abc", "abd", -1}, // both non-numeric → lex
 		{"2", "abc", strings.Compare("2", "abc")}, // mixed → lex fallback
 		{"", "", 0},
 	}
@@ -214,7 +214,7 @@ func TestFinalizeKookyGroups_SortsContainerIDNumerically(t *testing.T) {
 
 	want := []string{"default:two", "default:ten"}
 	got := []string{sets[0].Profile, sets[1].Profile}
-	if !reflect.DeepEqual(got, want) {
+	if !slices.Equal(got, want) {
 		t.Fatalf("profiles = %v, want %v (numeric ContainerID sort)", got, want)
 	}
 }

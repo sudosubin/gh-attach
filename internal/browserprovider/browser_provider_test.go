@@ -92,7 +92,7 @@ func TestBrowserProviderLoad_ReturnsSessionPerSet(t *testing.T) {
 		},
 	}
 
-	sessions, err := p.Load(context.Background(), "github.com", cookies.Source{Browser: cookies.BrowserAuto})
+	sessions, err := p.Load(t.Context(), "github.com", cookies.Source{Browser: cookies.BrowserAuto})
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -129,7 +129,7 @@ func TestBrowserProviderLoad_FailsOnAutoProviderBrowser(t *testing.T) {
 		},
 	}
 
-	_, err := p.Load(context.Background(), "github.com", cookies.Source{})
+	_, err := p.Load(t.Context(), "github.com", cookies.Source{})
 	if err == nil {
 		t.Fatalf("Load() error = nil, want non-nil")
 	}

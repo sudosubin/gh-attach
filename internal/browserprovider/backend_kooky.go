@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -147,10 +148,8 @@ type kookyGroupKey struct {
 
 // kooky's Container field is "N|Name", "N", or "".
 func splitContainer(raw string) (id, name string) {
-	if i := strings.Index(raw, "|"); i >= 0 {
-		return raw[:i], raw[i+1:]
-	}
-	return raw, ""
+	id, name, _ = strings.Cut(raw, "|")
+	return id, name
 }
 
 func cookieGroupKey(sel cookies.ProfileSelector, profile string, id, name string) (kookyGroupKey, bool) {
@@ -171,10 +170,7 @@ func containerMatches(sel cookies.ProfileSelector, id, name string) bool {
 }
 
 func finalizeKookyGroups(groups map[kookyGroupKey][]*http.Cookie) []CookieSet {
-	keys := make([]kookyGroupKey, 0, len(groups))
-	for k := range groups {
-		keys = append(keys, k)
-	}
+	keys := slices.Collect(maps.Keys(groups))
 	slices.SortFunc(keys, func(a, b kookyGroupKey) int {
 		return cmp.Or(
 			cmp.Compare(a.Profile, b.Profile),
