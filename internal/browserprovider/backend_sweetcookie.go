@@ -20,7 +20,7 @@ func (b *sweetcookieBackend) Name() string {
 	return "sweetcookie"
 }
 
-func (b *sweetcookieBackend) Load(ctx context.Context, host string, source cookies.Source) ([]*http.Cookie, error) {
+func (b *sweetcookieBackend) Load(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
 	scBrowser, err := toSweetcookieBrowser(source.Browser)
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func (b *sweetcookieBackend) Load(ctx context.Context, host string, source cooki
 		out = append(out, hc)
 	}
 
-	return out, nil
+	return []CookieSet{{Profile: source.Profile, Cookies: out}}, nil
 }
 
 func toSweetcookieBrowser(browser cookies.Browser) (libsweetcookie.Browser, error) {

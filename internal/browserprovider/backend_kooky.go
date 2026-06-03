@@ -1,9 +1,12 @@
 package browserprovider
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 
 	rootkooky "github.com/browserutils/kooky"
@@ -22,47 +25,77 @@ func (b *kookyBackend) Name() string {
 	return "kooky"
 }
 
-func (b *kookyBackend) Load(ctx context.Context, host string, source cookies.Source) ([]*http.Cookie, error) {
+type storeContext struct {
+	browser cookies.Browser
+	path    string
+	profile string
+}
+
+func (b *kookyBackend) Load(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
 	if source.Browser != cookies.BrowserFirefox && source.Browser != cookies.BrowserSafari {
 		return nil, fmt.Errorf("kooky backend supports only firefox and safari, got %s", source.Browser)
 	}
+	sel := cookies.ParseProfileSelector(source.Profile)
 
 	if source.CookieStorePath != "" {
-		return b.loadFromExplicitPath(ctx, host, source)
+		sc := storeContext{browser: source.Browser, path: source.CookieStorePath}
+		sets, err := b.loadStore(ctx, host, sc, sel)
+		if err != nil {
+			return nil, err
+		}
+		if len(sets) == 0 {
+			return nil, fmt.Errorf("no cookies found")
+		}
+		return sets, nil
 	}
 
-	filters := []rootkooky.Filter{
-		rootkooky.Valid,
-		rootkooky.DomainHasSuffix(host),
+	var (
+		all         []CookieSet
+		storeErrors []string
+	)
+	for store, err := range rootkooky.TraverseCookieStores(ctx) {
+		if err != nil {
+			if store != nil {
+				store.Close()
+			}
+			continue
+		}
+		if store == nil {
+			continue
+		}
+
+		storeBrowser := store.Browser()
+		storeProfile := store.Profile()
+		storePath := store.FilePath()
+		store.Close()
+
+		if storeBrowser != string(source.Browser) {
+			continue
+		}
+		if sel.Profile != "" && !profileMatches(sel.Profile, storeProfile) {
+			continue
+		}
+
+		sc := storeContext{browser: source.Browser, path: storePath, profile: storeProfile}
+		sets, err := b.loadStore(ctx, host, sc, sel)
+		if err != nil {
+			storeErrors = append(storeErrors, fmt.Sprintf("%s: %v", storePath, err))
+			continue
+		}
+		all = append(all, sets...)
 	}
 
-	seq := rootkooky.TraverseCookies(ctx, filters...).OnlyCookies()
-	out := make([]*http.Cookie, 0)
-	for ck, err := range seq {
-		if err != nil || ck == nil {
-			continue
-		}
-		if ck.Browser == nil {
-			continue
-		}
-		if ck.Browser.Browser() != string(source.Browser) {
-			continue
-		}
-		if source.Profile != "" && !profileMatches(source.Profile, ck.Browser.Profile()) {
-			continue
-		}
-
-		hc := ck.Cookie
-		out = append(out, &hc)
-	}
-
-	if len(out) == 0 {
+	if len(all) == 0 && len(storeErrors) == 0 {
 		return nil, fmt.Errorf("no cookies found")
 	}
-	return out, nil
+	if len(all) == 0 && len(storeErrors) > 0 {
+		return nil, fmt.Errorf("no cookies found (%d store(s) failed: %s)", len(storeErrors), strings.Join(storeErrors, "; "))
+	}
+
+	return all, nil
 }
 
-func (b *kookyBackend) loadFromExplicitPath(ctx context.Context, host string, source cookies.Source) ([]*http.Cookie, error) {
+func (b *kookyBackend) loadStore(ctx context.Context, host string, sc storeContext, sel cookies.ProfileSelector) ([]CookieSet, error) {
 	filters := []rootkooky.Filter{
 		rootkooky.Valid,
 		rootkooky.DomainHasSuffix(host),
@@ -72,40 +105,111 @@ func (b *kookyBackend) loadFromExplicitPath(ctx context.Context, host string, so
 		cookiesOut []*rootkooky.Cookie
 		err        error
 	)
-
-	switch source.Browser {
+	switch sc.browser {
 	case cookies.BrowserFirefox:
-		cookiesOut, err = kfirefox.ReadCookies(ctx, source.CookieStorePath, filters...)
+		cookiesOut, err = kfirefox.ReadCookies(ctx, sc.path, filters...)
 	case cookies.BrowserSafari:
-		cookiesOut, err = ksafari.ReadCookies(ctx, source.CookieStorePath, filters...)
+		cookiesOut, err = ksafari.ReadCookies(ctx, sc.path, filters...)
 	default:
-		return nil, fmt.Errorf("unsupported explicit-path browser %s", source.Browser)
+		return nil, fmt.Errorf("unsupported browser %s", sc.browser)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	out := make([]*http.Cookie, 0, len(cookiesOut))
+	groups := map[kookyGroupKey][]*http.Cookie{}
 	for _, ck := range cookiesOut {
 		if ck == nil {
 			continue
 		}
-		if source.Profile != "" && ck.Browser != nil && !profileMatches(source.Profile, ck.Browser.Profile()) {
+		// Cookie-level metadata wins over the store default when present.
+		profile := sc.profile
+		if ck.Browser != nil {
+			profile = ck.Browser.Profile()
+		}
+		id, name := splitContainer(ck.Container)
+		key, ok := cookieGroupKey(sel, profile, id, name)
+		if !ok {
 			continue
 		}
 		hc := ck.Cookie
-		out = append(out, &hc)
+		groups[key] = append(groups[key], &hc)
 	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("no cookies found")
-	}
-	return out, nil
+
+	return finalizeKookyGroups(groups), nil
 }
 
-func profileMatches(expected, actual string) bool {
-	expected = strings.TrimSpace(expected)
-	if expected == "" {
-		return true
+type kookyGroupKey struct {
+	Profile       string
+	ContainerID   string
+	ContainerName string
+}
+
+// kooky's Container field is "N|Name", "N", or "".
+func splitContainer(raw string) (id, name string) {
+	if i := strings.Index(raw, "|"); i >= 0 {
+		return raw[:i], raw[i+1:]
 	}
-	return strings.EqualFold(expected, strings.TrimSpace(actual))
+	return raw, ""
+}
+
+func cookieGroupKey(sel cookies.ProfileSelector, profile string, id, name string) (kookyGroupKey, bool) {
+	if sel.Profile != "" && !profileMatches(sel.Profile, profile) {
+		return kookyGroupKey{}, false
+	}
+	if sel.Container != "" && !containerMatches(sel, id, name) {
+		return kookyGroupKey{}, false
+	}
+	return kookyGroupKey{Profile: profile, ContainerID: id, ContainerName: name}, true
+}
+
+func containerMatches(sel cookies.ProfileSelector, id, name string) bool {
+	if sel.MatchByID {
+		return id != "" && strings.EqualFold(sel.Container, id)
+	}
+	return name != "" && strings.EqualFold(sel.Container, name)
+}
+
+func finalizeKookyGroups(groups map[kookyGroupKey][]*http.Cookie) []CookieSet {
+	keys := make([]kookyGroupKey, 0, len(groups))
+	for k := range groups {
+		keys = append(keys, k)
+	}
+	slices.SortFunc(keys, func(a, b kookyGroupKey) int {
+		return cmp.Or(
+			cmp.Compare(a.Profile, b.Profile),
+			compareContainerID(a.ContainerID, b.ContainerID),
+			cmp.Compare(a.ContainerName, b.ContainerName),
+		)
+	})
+
+	sets := make([]CookieSet, 0, len(keys))
+	for _, k := range keys {
+		var profile string
+		switch {
+		case k.ContainerID == "" && k.ContainerName == "":
+			profile = k.Profile
+		case k.ContainerName != "":
+			profile = cookies.FormatProfileSelector(k.Profile, k.ContainerName, false)
+		default:
+			profile = cookies.FormatProfileSelector(k.Profile, k.ContainerID, true)
+		}
+		sets = append(sets, CookieSet{Profile: profile, Cookies: groups[k]})
+	}
+	return sets
+}
+
+// Callers always guard with `expected != ""`, so empty input is not handled here.
+func profileMatches(expected, actual string) bool {
+	return strings.EqualFold(strings.TrimSpace(expected), strings.TrimSpace(actual))
+}
+
+// Firefox userContextId is numeric ("1", "2", ...); fall back to lex compare if not.
+func compareContainerID(a, b string) int {
+	aN, aErr := strconv.Atoi(a)
+	bN, bErr := strconv.Atoi(b)
+	if aErr == nil && bErr == nil {
+		return cmp.Compare(aN, bN)
+	}
+	return cmp.Compare(a, b)
 }
