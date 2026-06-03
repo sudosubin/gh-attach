@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	rootkooky "github.com/browserutils/kooky"
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
 
@@ -224,5 +225,36 @@ func TestFinalizeKookyGroups_EmptyReturnsEmpty(t *testing.T) {
 	sets := finalizeKookyGroups(map[kookyGroupKey][]*http.Cookie{})
 	if len(sets) != 0 {
 		t.Fatalf("expected empty, got %v", sets)
+	}
+}
+
+type fakeBrowserInfo struct{ profile string }
+
+func (f fakeBrowserInfo) Browser() string        { return "firefox" }
+func (f fakeBrowserInfo) Profile() string        { return f.profile }
+func (f fakeBrowserInfo) IsDefaultProfile() bool { return false }
+func (f fakeBrowserInfo) FilePath() string       { return "" }
+
+func TestResolveCookieProfile(t *testing.T) {
+	t.Parallel()
+
+	const storeProfile = "default-release"
+
+	cases := []struct {
+		name string
+		info rootkooky.BrowserInfo
+		want string
+	}{
+		{"empty cookie profile does not clobber the discovered profile", fakeBrowserInfo{profile: ""}, storeProfile},
+		{"nil browser info keeps the discovered profile", nil, storeProfile},
+		{"cookie profile overrides when present", fakeBrowserInfo{profile: "dev-edition"}, "dev-edition"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolveCookieProfile(storeProfile, tc.info); got != tc.want {
+				t.Fatalf("resolveCookieProfile(%q, %v) = %q, want %q", storeProfile, tc.info, got, tc.want)
+			}
+		})
 	}
 }

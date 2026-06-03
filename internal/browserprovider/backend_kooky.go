@@ -125,7 +125,7 @@ func (b *kookyBackend) loadStore(ctx context.Context, host string, sc storeConte
 		}
 		// Cookie-level metadata wins over the store default when present.
 		profile := sc.profile
-		if ck.Browser != nil {
+		if ck.Browser != nil && ck.Browser.Profile() != "" {
 			profile = ck.Browser.Profile()
 		}
 		id, name := splitContainer(ck.Container)
