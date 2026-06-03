@@ -51,13 +51,15 @@ func ResolveSources(in ResolveInput) ([]Source, error) {
 		if err != nil {
 			return nil, fmt.Errorf("config.browsers[%d].browser: %w", i, err)
 		}
-		if strings.TrimSpace(e.Profile) != "" && strings.TrimSpace(e.CookieStorePath) != "" {
+		profile := strings.TrimSpace(e.Profile)
+		storePath := strings.TrimSpace(e.CookieStorePath)
+		if profile != "" && storePath != "" {
 			return nil, fmt.Errorf("config.browsers[%d]: profile cannot be combined with cookie_store_path", i)
 		}
 		sources = append(sources, Source{
 			Browser:         browser,
-			Profile:         e.Profile,
-			CookieStorePath: e.CookieStorePath,
+			Profile:         profile,
+			CookieStorePath: storePath,
 		})
 	}
 

@@ -88,9 +88,8 @@ func UserAgentForBrowser(browser cookies.Browser) (string, error) {
 	case cookies.BrowserEdge:
 		if runtime.GOOS == "windows" {
 			return gen.EdgeWindows(), nil
-		} else {
-			return gen.Edge(), nil
 		}
+		return gen.Edge(), nil
 	case cookies.BrowserFirefox:
 		switch runtime.GOOS {
 		case "windows":

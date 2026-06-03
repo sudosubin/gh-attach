@@ -86,11 +86,11 @@ func (b *kookyBackend) Load(ctx context.Context, host string, source cookies.Sou
 		all = append(all, sets...)
 	}
 
-	if len(all) == 0 && len(storeErrors) == 0 {
+	if len(all) == 0 {
+		if len(storeErrors) > 0 {
+			return nil, fmt.Errorf("no cookies found (%d store(s) failed: %s)", len(storeErrors), strings.Join(storeErrors, "; "))
+		}
 		return nil, fmt.Errorf("no cookies found")
-	}
-	if len(all) == 0 && len(storeErrors) > 0 {
-		return nil, fmt.Errorf("no cookies found (%d store(s) failed: %s)", len(storeErrors), strings.Join(storeErrors, "; "))
 	}
 
 	return all, nil
