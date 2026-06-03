@@ -1,6 +1,7 @@
 package browserprovider
 
 import (
+	"cmp"
 	"maps"
 	"net/http"
 	"slices"
@@ -191,18 +192,7 @@ func TestCompareContainerID(t *testing.T) {
 
 	for _, tc := range cases {
 		got := compareContainerID(tc.a, tc.b)
-		// Normalize sign to -1/0/1 for stable comparison.
-		sign := func(n int) int {
-			switch {
-			case n < 0:
-				return -1
-			case n > 0:
-				return 1
-			default:
-				return 0
-			}
-		}
-		if sign(got) != sign(tc.want) {
+		if cmp.Compare(got, 0) != cmp.Compare(tc.want, 0) {
 			t.Fatalf("compareContainerID(%q, %q) = %d, want sign %d", tc.a, tc.b, got, tc.want)
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
@@ -96,10 +97,7 @@ func (r *CookieResolver) logf(format string, args ...any) {
 }
 
 func containsFold(values []string, target string) bool {
-	for _, v := range values {
-		if strings.EqualFold(v, target) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(values, func(v string) bool {
+		return strings.EqualFold(v, target)
+	})
 }
