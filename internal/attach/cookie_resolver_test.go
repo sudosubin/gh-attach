@@ -151,7 +151,7 @@ func TestCookieResolver_LoginMatchIsCaseInsensitive(t *testing.T) {
 	}
 }
 
-func TestCookieResolver_PicksMatchingContainerSessionAndIsolatesCookies(t *testing.T) {
+func TestCookieResolver_PicksSessionMatchingLogin(t *testing.T) {
 	t.Parallel()
 
 	otherSession := browserprovider.BrowserSession{
@@ -189,10 +189,12 @@ func TestCookieResolver_PicksMatchingContainerSessionAndIsolatesCookies(t *testi
 	if resolved.Session.Profile != "default:sudosubin@example.com" {
 		t.Fatalf("Session.Profile = %q, want %q", resolved.Session.Profile, "default:sudosubin@example.com")
 	}
-	// Cookies from the other session must not leak into the resolved one.
+	// The resolver must return the whole session whose dotcom_user matches the
+	// login, not an earlier non-matching one. (Container isolation itself is
+	// covered by TestFinalizeKookyGroups_SplitsByContainerAndSortsDeterministically.)
 	for _, c := range resolved.Session.Cookies {
 		if c.Value == "sudo-session" || c.Value == "sudosubin" {
-			t.Fatalf("resolved session leaked cookie from other container: %+v", c)
+			t.Fatalf("resolved the wrong session: got a cookie from the non-matching one: %+v", c)
 		}
 	}
 }

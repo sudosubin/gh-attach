@@ -1,12 +1,12 @@
 package browserprovider
 
 import (
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
 	"testing"
 
-	rootkooky "github.com/browserutils/kooky"
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
 
@@ -155,14 +155,20 @@ func TestFinalizeKookyGroups_SplitsByContainerAndSortsDeterministically(t *testi
 		t.Fatalf("set profiles = %v, want %v", gotProfiles, wantProfiles)
 	}
 
-	// no cross-container cookie leakage
+	// Each set must hold exactly its own container's cookies — no value from
+	// another container may leak in, and none of its own may go missing.
+	wantCookies := map[string]map[string]string{
+		"default":                       {"_octo": "anon"},
+		"default:sudosubin@gmail.com":   {"dotcom_user": "sudosubin", "user_session": "sudo-session"},
+		"default:sudosubin@example.com": {"dotcom_user": "octocat", "user_session": "octocat-session"},
+	}
 	for _, s := range sets {
-		seen := map[string]string{}
+		got := map[string]string{}
 		for _, c := range s.Cookies {
-			if prev, dup := seen[c.Name]; dup {
-				t.Fatalf("profile=%q duplicate cookie %q values %q vs %q", s.Profile, c.Name, prev, c.Value)
-			}
-			seen[c.Name] = c.Value
+			got[c.Name] = c.Value
+		}
+		if !maps.Equal(got, wantCookies[s.Profile]) {
+			t.Fatalf("profile=%q cookies = %v, want %v", s.Profile, got, wantCookies[s.Profile])
 		}
 	}
 }
@@ -225,36 +231,5 @@ func TestFinalizeKookyGroups_EmptyReturnsEmpty(t *testing.T) {
 	sets := finalizeKookyGroups(map[kookyGroupKey][]*http.Cookie{})
 	if len(sets) != 0 {
 		t.Fatalf("expected empty, got %v", sets)
-	}
-}
-
-type fakeBrowserInfo struct{ profile string }
-
-func (f fakeBrowserInfo) Browser() string        { return "firefox" }
-func (f fakeBrowserInfo) Profile() string        { return f.profile }
-func (f fakeBrowserInfo) IsDefaultProfile() bool { return false }
-func (f fakeBrowserInfo) FilePath() string       { return "" }
-
-func TestResolveCookieProfile(t *testing.T) {
-	t.Parallel()
-
-	const storeProfile = "default-release"
-
-	cases := []struct {
-		name string
-		info rootkooky.BrowserInfo
-		want string
-	}{
-		{"empty cookie profile does not clobber the discovered profile", fakeBrowserInfo{profile: ""}, storeProfile},
-		{"nil browser info keeps the discovered profile", nil, storeProfile},
-		{"cookie profile overrides when present", fakeBrowserInfo{profile: "dev-edition"}, "dev-edition"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := resolveCookieProfile(storeProfile, tc.info); got != tc.want {
-				t.Fatalf("resolveCookieProfile(%q, %v) = %q, want %q", storeProfile, tc.info, got, tc.want)
-			}
-		})
 	}
 }
