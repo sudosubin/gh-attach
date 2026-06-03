@@ -62,16 +62,16 @@ func TestBackendName_Unconfigured(t *testing.T) {
 
 type stubBackend struct {
 	name string
-	load func(ctx context.Context, host string, source cookies.Source) ([]*http.Cookie, error)
+	load func(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error)
 }
 
 func (b stubBackend) Name() string { return b.name }
 
-func (b stubBackend) Load(ctx context.Context, host string, source cookies.Source) ([]*http.Cookie, error) {
+func (b stubBackend) Load(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
 	return b.load(ctx, host, source)
 }
 
-func TestBrowserProviderLoad_ReturnsCookiesAndUserAgent(t *testing.T) {
+func TestBrowserProviderLoad_ReturnsSessionPerSet(t *testing.T) {
 	t.Parallel()
 
 	called := false
@@ -79,32 +79,40 @@ func TestBrowserProviderLoad_ReturnsCookiesAndUserAgent(t *testing.T) {
 		browser: cookies.BrowserFirefox,
 		backend: stubBackend{
 			name: "stub",
-			load: func(ctx context.Context, host string, source cookies.Source) ([]*http.Cookie, error) {
+			load: func(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
 				called = true
 				if source.Browser != cookies.BrowserFirefox {
 					t.Fatalf("source.Browser = %q, want %q", source.Browser, cookies.BrowserFirefox)
 				}
-				return []*http.Cookie{{Name: "dotcom_user", Value: "sudosubin"}}, nil
+				return []CookieSet{
+					{Profile: "default:sudosubin@gmail.com", Cookies: []*http.Cookie{{Name: "dotcom_user", Value: "sudosubin"}}},
+					{Profile: "default:sudosubin@example.com", Cookies: []*http.Cookie{{Name: "dotcom_user", Value: "octocat"}}},
+				}, nil
 			},
 		},
 	}
 
-	session, err := p.Load(context.Background(), "github.com", cookies.Source{Browser: cookies.BrowserAuto})
+	sessions, err := p.Load(context.Background(), "github.com", cookies.Source{Browser: cookies.BrowserAuto})
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 	if !called {
 		t.Fatalf("backend.Load was not called")
 	}
-	if session.Browser != cookies.BrowserFirefox {
-		t.Fatalf("session.Browser = %q, want %q", session.Browser, cookies.BrowserFirefox)
-	}
-	if len(session.Cookies) != 1 {
-		t.Fatalf("len(session.Cookies) = %d, want 1", len(session.Cookies))
+	if len(sessions) != 2 {
+		t.Fatalf("len(sessions) = %d, want 2", len(sessions))
 	}
 	wantUA, _ := UserAgentForBrowser(cookies.BrowserFirefox)
-	if session.UserAgent != wantUA {
-		t.Fatalf("session.UserAgent = %q", session.UserAgent)
+	for i, s := range sessions {
+		if s.Browser != cookies.BrowserFirefox {
+			t.Fatalf("session[%d].Browser = %q", i, s.Browser)
+		}
+		if s.UserAgent != wantUA {
+			t.Fatalf("session[%d].UserAgent = %q", i, s.UserAgent)
+		}
+	}
+	if sessions[0].Profile != "default:sudosubin@gmail.com" || sessions[1].Profile != "default:sudosubin@example.com" {
+		t.Fatalf("session profiles = %q,%q", sessions[0].Profile, sessions[1].Profile)
 	}
 }
 
@@ -115,8 +123,8 @@ func TestBrowserProviderLoad_FailsOnAutoProviderBrowser(t *testing.T) {
 		browser: cookies.BrowserAuto,
 		backend: stubBackend{
 			name: "stub",
-			load: func(ctx context.Context, host string, source cookies.Source) ([]*http.Cookie, error) {
-				return []*http.Cookie{{Name: "dotcom_user", Value: "sudosubin"}}, nil
+			load: func(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
+				return []CookieSet{{Cookies: []*http.Cookie{{Name: "dotcom_user", Value: "sudosubin"}}}}, nil
 			},
 		},
 	}

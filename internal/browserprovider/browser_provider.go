@@ -25,30 +25,35 @@ func (p *browserProvider) BackendName() string {
 	return p.backend.Name()
 }
 
-func (p *browserProvider) Load(ctx context.Context, host string, source cookies.Source) (BrowserSession, error) {
+func (p *browserProvider) Load(ctx context.Context, host string, source cookies.Source) ([]BrowserSession, error) {
 	if p.backend == nil {
-		return BrowserSession{}, fmt.Errorf("cookie backend not configured for browser %s", p.browser)
+		return nil, fmt.Errorf("cookie backend not configured for browser %s", p.browser)
 	}
 	if p.browser == cookies.BrowserAuto || p.browser == "" {
-		return BrowserSession{}, fmt.Errorf("browser provider requires concrete browser, got %q", p.browser)
+		return nil, fmt.Errorf("browser provider requires concrete browser, got %q", p.browser)
 	}
 
 	source.Browser = p.browser
-	loadedCookies, err := p.backend.Load(ctx, host, source)
+	sets, err := p.backend.Load(ctx, host, source)
 	if err != nil {
-		return BrowserSession{}, err
+		return nil, err
 	}
 
 	userAgent, err := UserAgentForBrowser(p.browser)
 	if err != nil {
-		return BrowserSession{}, err
+		return nil, err
 	}
 
-	return BrowserSession{
-		Browser:   p.browser,
-		Cookies:   loadedCookies,
-		UserAgent: userAgent,
-	}, nil
+	sessions := make([]BrowserSession, 0, len(sets))
+	for _, s := range sets {
+		sessions = append(sessions, BrowserSession{
+			Browser:   p.browser,
+			Profile:   s.Profile,
+			Cookies:   s.Cookies,
+			UserAgent: userAgent,
+		})
+	}
+	return sessions, nil
 }
 
 func NewDefaultRegistry() map[cookies.Browser]BrowserProvider {
