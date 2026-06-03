@@ -51,36 +51,38 @@ func (r *CookieResolver) Resolve(ctx context.Context, host, ghLogin string, sour
 			}
 
 			backendName := provider.BackendName()
-			session, err := provider.Load(ctx, host, candidate)
+			sessions, err := provider.Load(ctx, host, candidate)
 			if err != nil {
 				r.logf("source[%d]: browser=%s profile=%q cookie_store_path=%q provider=%s error=%v\n",
 					idx, candidate.Browser, candidate.Profile, candidate.CookieStorePath, backendName, err)
 				continue
 			}
 
-			dotcomUsers := cookies.ValuesForHost(session.Cookies, "dotcom_user", host)
-			if len(dotcomUsers) == 0 {
-				r.logf("source[%d]: browser=%s provider=%s skipped (dotcom_user missing)\n",
-					idx, candidate.Browser, backendName)
-				continue
+			for _, session := range sessions {
+				dotcomUsers := cookies.ValuesForHost(session.Cookies, "dotcom_user", host)
+				if len(dotcomUsers) == 0 {
+					r.logf("source[%d]: browser=%s provider=%s profile=%q skipped (dotcom_user missing)\n",
+						idx, candidate.Browser, backendName, session.Profile)
+					continue
+				}
+
+				if !containsFold(dotcomUsers, ghLogin) {
+					r.logf("source[%d]: browser=%s provider=%s profile=%q skipped (dotcom_user=%q != gh_login=%q)\n",
+						idx, candidate.Browser, backendName, session.Profile, strings.Join(dotcomUsers, ","), ghLogin)
+					continue
+				}
+
+				r.logf("source[%d]: browser=%s provider=%s profile=%q matched dotcom_user=%q\n",
+					idx, candidate.Browser, backendName, session.Profile, ghLogin)
+				r.logf("selected source: browser=%s profile=%q cookie_store_path=%q provider=%s\n",
+					candidate.Browser, session.Profile, candidate.CookieStorePath, backendName)
+
+				return ResolvedCookies{
+					Session:      session,
+					Source:       candidate,
+					ProviderName: backendName,
+				}, nil
 			}
-
-			if !containsFold(dotcomUsers, ghLogin) {
-				r.logf("source[%d]: browser=%s provider=%s skipped (dotcom_user=%q != gh_login=%q)\n",
-					idx, candidate.Browser, backendName, strings.Join(dotcomUsers, ","), ghLogin)
-				continue
-			}
-
-			r.logf("source[%d]: browser=%s provider=%s matched dotcom_user=%q\n",
-				idx, candidate.Browser, backendName, ghLogin)
-			r.logf("selected source: browser=%s profile=%q cookie_store_path=%q provider=%s\n",
-				candidate.Browser, candidate.Profile, candidate.CookieStorePath, backendName)
-
-			return ResolvedCookies{
-				Session:      session,
-				Source:       candidate,
-				ProviderName: backendName,
-			}, nil
 		}
 	}
 
