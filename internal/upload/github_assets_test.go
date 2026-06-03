@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -95,6 +96,57 @@ func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.
 	}
 	if receivedClientVersion != "" {
 		t.Fatalf("X-GitHub-Client-Version = %q, want empty", receivedClientVersion)
+	}
+}
+
+func TestCookieHeaderForURL_RejectsDuplicateKeys(t *testing.T) {
+	t.Parallel()
+
+	dupes := []*http.Cookie{
+		{Name: "user_session", Value: "from-container-1", Domain: "github.com", Path: "/"},
+		{Name: "user_session", Value: "from-container-2", Domain: "github.com", Path: "/"},
+	}
+
+	_, err := cookieHeaderForURL(dupes, "https://github.com/")
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate cookie") {
+		t.Fatalf("error = %v, want it to mention duplicate cookie", err)
+	}
+}
+
+func TestCookieHeaderForURL_RejectsDuplicateKeysAcrossDomainPrefix(t *testing.T) {
+	t.Parallel()
+
+	dupes := []*http.Cookie{
+		{Name: "user_session", Value: "from-container-1", Domain: "github.com", Path: "/"},
+		{Name: "user_session", Value: "from-container-2", Domain: ".github.com", Path: "/"},
+	}
+
+	_, err := cookieHeaderForURL(dupes, "https://github.com/")
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate cookie") {
+		t.Fatalf("error = %v, want it to mention duplicate cookie", err)
+	}
+}
+
+func TestCookieHeaderForURL_AcceptsDistinctKeys(t *testing.T) {
+	t.Parallel()
+
+	in := []*http.Cookie{
+		{Name: "dotcom_user", Value: "octocat", Domain: "github.com", Path: "/"},
+		{Name: "user_session", Value: "abc", Domain: "github.com", Path: "/"},
+	}
+
+	got, err := cookieHeaderForURL(in, "https://github.com/")
+	if err != nil {
+		t.Fatalf("cookieHeaderForURL() error = %v", err)
+	}
+	if !strings.Contains(got, "dotcom_user=octocat") || !strings.Contains(got, "user_session=abc") {
+		t.Fatalf("header = %q, missing expected cookies", got)
 	}
 }
 

@@ -15,14 +15,19 @@ type ResolveInput struct {
 
 func ResolveSources(in ResolveInput) ([]Source, error) {
 	if hasCLIOverride(in) {
+		profile := strings.TrimSpace(in.Profile)
+		path := strings.TrimSpace(in.CookieStorePath)
+		if profile != "" && path != "" {
+			return nil, fmt.Errorf("--profile cannot be combined with --cookie-store-path; the path bypasses profile discovery")
+		}
 		browser, err := ParseBrowser(in.Browser)
 		if err != nil {
 			return nil, err
 		}
 		return []Source{{
 			Browser:         browser,
-			Profile:         strings.TrimSpace(in.Profile),
-			CookieStorePath: strings.TrimSpace(in.CookieStorePath),
+			Profile:         profile,
+			CookieStorePath: path,
 		}}, nil
 	}
 
@@ -45,6 +50,9 @@ func ResolveSources(in ResolveInput) ([]Source, error) {
 		browser, err := ParseBrowser(e.Browser)
 		if err != nil {
 			return nil, fmt.Errorf("config.browsers[%d].browser: %w", i, err)
+		}
+		if strings.TrimSpace(e.Profile) != "" && strings.TrimSpace(e.CookieStorePath) != "" {
+			return nil, fmt.Errorf("config.browsers[%d]: profile cannot be combined with cookie_store_path", i)
 		}
 		sources = append(sources, Source{
 			Browser:         browser,

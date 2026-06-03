@@ -25,11 +25,10 @@ func writeDefaultAttachConfig(t *testing.T, content string) string {
 	return path
 }
 
-func TestResolveSources_CLIOverride(t *testing.T) {
+func TestResolveSources_CLIOverrideWithProfile(t *testing.T) {
 	sources, err := ResolveSources(ResolveInput{
-		Browser:         "chrome",
-		Profile:         "Default",
-		CookieStorePath: "/tmp/Cookies",
+		Browser: "chrome",
+		Profile: "Default",
 	})
 	if err != nil {
 		t.Fatalf("ResolveSources() error = %v", err)
@@ -44,8 +43,52 @@ func TestResolveSources_CLIOverride(t *testing.T) {
 	if sources[0].Profile != "Default" {
 		t.Fatalf("profile = %q", sources[0].Profile)
 	}
-	if sources[0].CookieStorePath != "/tmp/Cookies" {
-		t.Fatalf("cookieStorePath = %q", sources[0].CookieStorePath)
+	if sources[0].CookieStorePath != "" {
+		t.Fatalf("cookieStorePath = %q, want empty", sources[0].CookieStorePath)
+	}
+}
+
+func TestResolveSources_CLIOverrideWithCookieStorePath(t *testing.T) {
+	sources, err := ResolveSources(ResolveInput{
+		Browser:         "chrome",
+		CookieStorePath: "/tmp/Cookies",
+	})
+	if err != nil {
+		t.Fatalf("ResolveSources() error = %v", err)
+	}
+
+	if len(sources) != 1 || sources[0].CookieStorePath != "/tmp/Cookies" || sources[0].Profile != "" {
+		t.Fatalf("sources = %#v", sources)
+	}
+}
+
+func TestResolveSources_RejectsProfileWithCookieStorePathCLI(t *testing.T) {
+	_, err := ResolveSources(ResolveInput{
+		Browser:         "chrome",
+		Profile:         "Default",
+		CookieStorePath: "/tmp/Cookies",
+	})
+	if err == nil {
+		t.Fatalf("ResolveSources() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("error = %q, want to mention 'cannot be combined'", err.Error())
+	}
+}
+
+func TestResolveSources_RejectsProfileWithCookieStorePathConfig(t *testing.T) {
+	writeDefaultAttachConfig(t, `browsers:
+  - browser: chrome
+    profile: Default
+    cookie_store_path: /tmp/Cookies
+`)
+
+	_, err := ResolveSources(ResolveInput{})
+	if err == nil {
+		t.Fatalf("ResolveSources() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "config.browsers[0]") || !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("error = %q, want to mention config.browsers[0] and 'cannot be combined'", err.Error())
 	}
 }
 

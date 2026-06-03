@@ -305,6 +305,18 @@ func cookieHeaderForURL(cookies []*http.Cookie, rawURL string) (string, error) {
 		return "", err
 	}
 
+	// Duplicate (Name, Domain, Path) means container isolation leaked.
+	// Cookiejar would silently keep the last, so fail explicitly.
+	type cookieKey struct{ name, domain, path string }
+	seen := map[cookieKey]struct{}{}
+	for _, c := range cookies {
+		key := cookieKey{c.Name, strings.TrimPrefix(c.Domain, "."), c.Path}
+		if _, dup := seen[key]; dup {
+			return "", fmt.Errorf("duplicate cookie %q for %s%s — container isolation may have failed", c.Name, c.Domain, c.Path)
+		}
+		seen[key] = struct{}{}
+	}
+
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return "", err
