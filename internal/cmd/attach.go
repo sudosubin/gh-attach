@@ -39,7 +39,7 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
 
 	cmd.Flags().StringVarP(&opts.Repo, "repo", "R", "", "[HOST/]OWNER/REPO")
 	cmd.Flags().StringVar(&opts.Browser, "browser", "", "Browser to use (auto|chrome|chromium|edge|firefox|safari|brave|vivaldi|opera)")
-	cmd.Flags().StringVar(&opts.Profile, "profile", "", "Browser profile name or path")
+	cmd.Flags().StringVar(&opts.Profile, "profile", "", "Browser profile name")
 	cmd.Flags().StringVar(&opts.CookieStorePath, "cookie-store-path", "", "Cookie store file path")
 	cmd.Flags().BoolVarP(&opts.Verbose, "verbose", "v", false, "Verbose output")
 
