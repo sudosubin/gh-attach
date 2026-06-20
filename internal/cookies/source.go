@@ -2,34 +2,43 @@ package cookies
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
 type Browser string
 
 const (
-	BrowserAuto     Browser = "auto"
-	BrowserChrome   Browser = "chrome"
-	BrowserChromium Browser = "chromium"
-	BrowserEdge     Browser = "edge"
-	BrowserFirefox  Browser = "firefox"
-	BrowserSafari   Browser = "safari"
-	BrowserBrave    Browser = "brave"
-	BrowserVivaldi  Browser = "vivaldi"
-	BrowserOpera    Browser = "opera"
+	BrowserAuto Browser = "auto"
+
+	BrowserArc       Browser = "arc"
+	BrowserAtlas     Browser = "atlas"
+	BrowserBrave     Browser = "brave"
+	BrowserChrome    Browser = "chrome"
+	BrowserChromium  Browser = "chromium"
+	BrowserComet     Browser = "comet"
+	BrowserDia       Browser = "dia"
+	BrowserEdge      Browser = "edge"
+	BrowserFirefox   Browser = "firefox"
+	BrowserFloorp    Browser = "floorp"
+	BrowserHelium    Browser = "helium"
+	BrowserLibreWolf Browser = "librewolf"
+	BrowserOpera     Browser = "opera"
+	BrowserSafari    Browser = "safari"
+	BrowserVivaldi   Browser = "vivaldi"
+	BrowserWaterfox  Browser = "waterfox"
+	BrowserWhale     Browser = "whale"
+	BrowserZen       Browser = "zen"
 )
 
-var validBrowsers = map[Browser]struct{}{
-	BrowserAuto:     {},
-	BrowserChrome:   {},
-	BrowserChromium: {},
-	BrowserEdge:     {},
-	BrowserFirefox:  {},
-	BrowserSafari:   {},
-	BrowserBrave:    {},
-	BrowserVivaldi:  {},
-	BrowserOpera:    {},
-}
+// validBrowsers is derived from allBrowsers plus "auto".
+var validBrowsers = func() map[Browser]struct{} {
+	m := map[Browser]struct{}{BrowserAuto: {}}
+	for _, b := range allBrowsers {
+		m[b] = struct{}{}
+	}
+	return m
+}()
 
 type Source struct {
 	Browser         Browser
@@ -37,15 +46,51 @@ type Source struct {
 	CookieStorePath string
 }
 
-var autoBrowserOrder = []Browser{
+// allBrowsers is the canonical set of concrete (non-auto) browsers, alphabetical.
+var allBrowsers = []Browser{
+	BrowserArc,
+	BrowserAtlas,
+	BrowserBrave,
 	BrowserChrome,
 	BrowserChromium,
+	BrowserComet,
+	BrowserDia,
 	BrowserEdge,
-	BrowserBrave,
-	BrowserVivaldi,
-	BrowserOpera,
 	BrowserFirefox,
+	BrowserFloorp,
+	BrowserHelium,
+	BrowserLibreWolf,
+	BrowserOpera,
 	BrowserSafari,
+	BrowserVivaldi,
+	BrowserWaterfox,
+	BrowserWhale,
+	BrowserZen,
+}
+
+// autoProbeOrder is the probe order for "auto", ranked by macOS/Linux usage.
+var autoProbeOrder = []Browser{
+	// tier 1
+	BrowserChrome,
+	BrowserSafari,
+	BrowserFirefox,
+	// tier 2
+	BrowserChromium,
+	BrowserBrave,
+	BrowserArc,
+	BrowserVivaldi,
+	BrowserEdge,
+	BrowserOpera,
+	// tier 3
+	BrowserAtlas,
+	BrowserComet,
+	BrowserDia,
+	BrowserHelium,
+	BrowserWhale,
+	BrowserFloorp,
+	BrowserLibreWolf,
+	BrowserWaterfox,
+	BrowserZen,
 }
 
 func ExpandSource(source Source) []Source {
@@ -53,8 +98,8 @@ func ExpandSource(source Source) []Source {
 		return []Source{source}
 	}
 
-	expanded := make([]Source, 0, len(autoBrowserOrder))
-	for _, b := range autoBrowserOrder {
+	expanded := make([]Source, 0, len(autoProbeOrder))
+	for _, b := range autoProbeOrder {
 		expanded = append(expanded, Source{
 			Browser:         b,
 			Profile:         source.Profile,
@@ -69,13 +114,7 @@ func ApplyDefaultProfile(source Source) Source {
 		return source
 	}
 
-	switch source.Browser {
-	case BrowserChrome,
-		BrowserChromium,
-		BrowserEdge,
-		BrowserBrave,
-		BrowserVivaldi,
-		BrowserOpera:
+	if source.Browser.IsChromium() {
 		source.Profile = "Default"
 	}
 
@@ -91,6 +130,41 @@ func ParseBrowser(v string) (Browser, error) {
 		return "", fmt.Errorf("unsupported browser %q", v)
 	}
 	return b, nil
+}
+
+// IsChromium reports whether the browser uses the Chromium cookie store layout.
+func (b Browser) IsChromium() bool {
+	switch b {
+	case BrowserArc, BrowserAtlas, BrowserBrave, BrowserChrome, BrowserChromium, BrowserComet,
+		BrowserDia, BrowserEdge, BrowserHelium, BrowserOpera, BrowserVivaldi, BrowserWhale:
+		return true
+	}
+	return false
+}
+
+// IsFirefox reports whether the browser is Firefox or a Firefox fork (with
+// multi-account container support).
+func (b Browser) IsFirefox() bool {
+	switch b {
+	case BrowserFirefox, BrowserFloorp, BrowserLibreWolf, BrowserWaterfox, BrowserZen:
+		return true
+	}
+	return false
+}
+
+// ConcreteBrowsers returns every selectable browser except "auto".
+func ConcreteBrowsers() []Browser {
+	return slices.Clone(allBrowsers)
+}
+
+// BrowserChoices returns the pipe-separated browser names for help text.
+func BrowserChoices() string {
+	names := make([]string, 0, len(allBrowsers)+1)
+	names = append(names, string(BrowserAuto))
+	for _, b := range allBrowsers {
+		names = append(names, string(b))
+	}
+	return strings.Join(names, "|")
 }
 
 // ProfileSelector is parsed from "<profile>[:<container-selector>]".

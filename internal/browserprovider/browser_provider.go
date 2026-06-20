@@ -59,37 +59,23 @@ func (p *browserProvider) Load(ctx context.Context, host string, source cookies.
 func NewDefaultRegistry() map[cookies.Browser]BrowserProvider {
 	sweet := newSweetcookieBackend()
 
-	return map[cookies.Browser]BrowserProvider{
-		cookies.BrowserChrome:   &browserProvider{browser: cookies.BrowserChrome, backend: sweet},
-		cookies.BrowserChromium: &browserProvider{browser: cookies.BrowserChromium, backend: sweet},
-		cookies.BrowserEdge:     &browserProvider{browser: cookies.BrowserEdge, backend: sweet},
-		cookies.BrowserBrave:    &browserProvider{browser: cookies.BrowserBrave, backend: sweet},
-		cookies.BrowserVivaldi:  &browserProvider{browser: cookies.BrowserVivaldi, backend: sweet},
-		cookies.BrowserOpera:    &browserProvider{browser: cookies.BrowserOpera, backend: sweet},
-		cookies.BrowserFirefox:  &browserProvider{browser: cookies.BrowserFirefox, backend: sweet},
-		cookies.BrowserSafari:   &browserProvider{browser: cookies.BrowserSafari, backend: sweet},
+	reg := make(map[cookies.Browser]BrowserProvider)
+	for _, b := range cookies.ConcreteBrowsers() {
+		reg[b] = &browserProvider{browser: b, backend: sweet}
 	}
+	return reg
 }
 
 func UserAgentForBrowser(browser cookies.Browser) (string, error) {
 	gen := ua.WithSeed(0)
 
-	switch browser {
-	case cookies.BrowserChrome, cookies.BrowserChromium, cookies.BrowserBrave, cookies.BrowserVivaldi, cookies.BrowserOpera:
-		switch runtime.GOOS {
-		case "windows":
-			return gen.ChromeWindows(), nil
-		case "darwin":
-			return gen.ChromeMac(), nil
-		default:
-			return gen.ChromeLinux(), nil
-		}
-	case cookies.BrowserEdge:
+	switch {
+	case browser == cookies.BrowserEdge:
 		if runtime.GOOS == "windows" {
 			return gen.EdgeWindows(), nil
 		}
 		return gen.Edge(), nil
-	case cookies.BrowserFirefox:
+	case browser.IsFirefox():
 		switch runtime.GOOS {
 		case "windows":
 			return gen.FirefoxWindows(), nil
@@ -98,8 +84,17 @@ func UserAgentForBrowser(browser cookies.Browser) (string, error) {
 		default:
 			return gen.Firefox(), nil
 		}
-	case cookies.BrowserSafari:
+	case browser == cookies.BrowserSafari:
 		return gen.Safari(), nil
+	case browser.IsChromium():
+		switch runtime.GOOS {
+		case "windows":
+			return gen.ChromeWindows(), nil
+		case "darwin":
+			return gen.ChromeMac(), nil
+		default:
+			return gen.ChromeLinux(), nil
+		}
 	default:
 		return gen.Chrome(), nil
 	}

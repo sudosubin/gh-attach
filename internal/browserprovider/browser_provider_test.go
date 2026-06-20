@@ -13,17 +13,21 @@ func TestNewDefaultRegistry(t *testing.T) {
 
 	reg := NewDefaultRegistry()
 
-	if got := reg[cookies.BrowserChrome].BackendName(); got != "sweetcookie" {
-		t.Fatalf("chrome backend = %q", got)
+	for _, b := range cookies.ConcreteBrowsers() {
+		p, ok := reg[b]
+		if !ok {
+			t.Fatalf("browser %q missing from registry", b)
+		}
+		if got := p.BackendName(); got != "sweetcookie" {
+			t.Fatalf("%q backend = %q, want sweetcookie", b, got)
+		}
 	}
-	if got := reg[cookies.BrowserChromium].BackendName(); got != "sweetcookie" {
-		t.Fatalf("chromium backend = %q", got)
+
+	if _, ok := reg[cookies.BrowserAuto]; ok {
+		t.Fatalf("auto should not be registered")
 	}
-	if got := reg[cookies.BrowserFirefox].BackendName(); got != "sweetcookie" {
-		t.Fatalf("firefox backend = %q", got)
-	}
-	if got := reg[cookies.BrowserSafari].BackendName(); got != "sweetcookie" {
-		t.Fatalf("safari backend = %q", got)
+	if len(reg) != len(cookies.ConcreteBrowsers()) {
+		t.Fatalf("registry has %d entries, want %d", len(reg), len(cookies.ConcreteBrowsers()))
 	}
 }
 
@@ -48,6 +52,13 @@ func TestUserAgentForBrowser(t *testing.T) {
 	autoUA, err := UserAgentForBrowser(cookies.BrowserAuto)
 	if err != nil || autoUA == "" {
 		t.Fatalf("auto user agent error = %v, user-agent = %q", err, autoUA)
+	}
+
+	for _, b := range cookies.ConcreteBrowsers() {
+		got, err := UserAgentForBrowser(b)
+		if err != nil || got == "" {
+			t.Fatalf("browser=%s user agent error = %v, user-agent = %q", b, err, got)
+		}
 	}
 }
 
