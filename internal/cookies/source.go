@@ -31,10 +31,10 @@ const (
 	BrowserZen       Browser = "zen"
 )
 
-// validBrowsers is derived from autoBrowserOrder plus "auto".
+// validBrowsers is derived from allBrowsers plus "auto".
 var validBrowsers = func() map[Browser]struct{} {
 	m := map[Browser]struct{}{BrowserAuto: {}}
-	for _, b := range autoBrowserOrder {
+	for _, b := range allBrowsers {
 		m[b] = struct{}{}
 	}
 	return m
@@ -46,9 +46,8 @@ type Source struct {
 	CookieStorePath string
 }
 
-// autoBrowserOrder is the probe order for "auto" (alphabetical) and the
-// canonical set of concrete (non-auto) browsers.
-var autoBrowserOrder = []Browser{
+// allBrowsers is the canonical set of concrete (non-auto) browsers, alphabetical.
+var allBrowsers = []Browser{
 	BrowserArc,
 	BrowserAtlas,
 	BrowserBrave,
@@ -69,13 +68,38 @@ var autoBrowserOrder = []Browser{
 	BrowserZen,
 }
 
+// autoProbeOrder is the probe order for "auto", ranked by macOS/Linux usage.
+var autoProbeOrder = []Browser{
+	// tier 1
+	BrowserChrome,
+	BrowserSafari,
+	BrowserFirefox,
+	// tier 2
+	BrowserChromium,
+	BrowserBrave,
+	BrowserArc,
+	BrowserVivaldi,
+	BrowserEdge,
+	BrowserOpera,
+	// tier 3
+	BrowserAtlas,
+	BrowserComet,
+	BrowserDia,
+	BrowserHelium,
+	BrowserWhale,
+	BrowserFloorp,
+	BrowserLibreWolf,
+	BrowserWaterfox,
+	BrowserZen,
+}
+
 func ExpandSource(source Source) []Source {
 	if source.Browser != BrowserAuto {
 		return []Source{source}
 	}
 
-	expanded := make([]Source, 0, len(autoBrowserOrder))
-	for _, b := range autoBrowserOrder {
+	expanded := make([]Source, 0, len(autoProbeOrder))
+	for _, b := range autoProbeOrder {
 		expanded = append(expanded, Source{
 			Browser:         b,
 			Profile:         source.Profile,
@@ -130,14 +154,14 @@ func (b Browser) IsFirefox() bool {
 
 // ConcreteBrowsers returns every selectable browser except "auto".
 func ConcreteBrowsers() []Browser {
-	return slices.Clone(autoBrowserOrder)
+	return slices.Clone(allBrowsers)
 }
 
 // BrowserChoices returns the pipe-separated browser names for help text.
 func BrowserChoices() string {
-	names := make([]string, 0, len(autoBrowserOrder)+1)
+	names := make([]string, 0, len(allBrowsers)+1)
 	names = append(names, string(BrowserAuto))
-	for _, b := range autoBrowserOrder {
+	for _, b := range allBrowsers {
 		names = append(names, string(b))
 	}
 	return strings.Join(names, "|")

@@ -9,7 +9,7 @@ func TestExpandSource_Auto(t *testing.T) {
 	if len(expanded) == 0 {
 		t.Fatalf("expected expanded sources")
 	}
-	if expanded[0].Browser != BrowserArc {
+	if expanded[0].Browser != BrowserChrome {
 		t.Fatalf("first browser = %s", expanded[0].Browser)
 	}
 	if expanded[len(expanded)-1].Browser != BrowserZen {
