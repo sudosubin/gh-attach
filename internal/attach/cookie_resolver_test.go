@@ -176,7 +176,7 @@ func TestCookieResolver_PicksSessionMatchingLogin(t *testing.T) {
 	sources := []cookies.Source{{Browser: cookies.BrowserFirefox}}
 	providers := map[cookies.Browser]browserprovider.BrowserProvider{
 		cookies.BrowserFirefox: stubProvider{
-			backend:  "kooky",
+			backend:  "sweetcookie",
 			sessions: []browserprovider.BrowserSession{otherSession, targetSession},
 		},
 	}
@@ -191,7 +191,7 @@ func TestCookieResolver_PicksSessionMatchingLogin(t *testing.T) {
 	}
 	// The resolver must return the whole session whose dotcom_user matches the
 	// login, not an earlier non-matching one. (Container isolation itself is
-	// covered by TestFinalizeKookyGroups_SplitsByContainerAndSortsDeterministically.)
+	// covered by TestFinalizeContainerGroups_SplitsByContainerAndSortsDeterministically.)
 	for _, c := range resolved.Session.Cookies {
 		if c.Value == "sudo-session" || c.Value == "sudosubin" {
 			t.Fatalf("resolved the wrong session: got a cookie from the non-matching one: %+v", c)

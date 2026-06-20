@@ -19,10 +19,10 @@ func TestNewDefaultRegistry(t *testing.T) {
 	if got := reg[cookies.BrowserChromium].BackendName(); got != "sweetcookie" {
 		t.Fatalf("chromium backend = %q", got)
 	}
-	if got := reg[cookies.BrowserFirefox].BackendName(); got != "kooky" {
+	if got := reg[cookies.BrowserFirefox].BackendName(); got != "sweetcookie" {
 		t.Fatalf("firefox backend = %q", got)
 	}
-	if got := reg[cookies.BrowserSafari].BackendName(); got != "kooky" {
+	if got := reg[cookies.BrowserSafari].BackendName(); got != "sweetcookie" {
 		t.Fatalf("safari backend = %q", got)
 	}
 }
