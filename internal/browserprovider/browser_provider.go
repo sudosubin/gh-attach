@@ -58,7 +58,6 @@ func (p *browserProvider) Load(ctx context.Context, host string, source cookies.
 
 func NewDefaultRegistry() map[cookies.Browser]BrowserProvider {
 	sweet := newSweetcookieBackend()
-	kooky := newKookyBackend()
 
 	return map[cookies.Browser]BrowserProvider{
 		cookies.BrowserChrome:   &browserProvider{browser: cookies.BrowserChrome, backend: sweet},
@@ -67,8 +66,8 @@ func NewDefaultRegistry() map[cookies.Browser]BrowserProvider {
 		cookies.BrowserBrave:    &browserProvider{browser: cookies.BrowserBrave, backend: sweet},
 		cookies.BrowserVivaldi:  &browserProvider{browser: cookies.BrowserVivaldi, backend: sweet},
 		cookies.BrowserOpera:    &browserProvider{browser: cookies.BrowserOpera, backend: sweet},
-		cookies.BrowserFirefox:  &browserProvider{browser: cookies.BrowserFirefox, backend: kooky},
-		cookies.BrowserSafari:   &browserProvider{browser: cookies.BrowserSafari, backend: kooky},
+		cookies.BrowserFirefox:  &browserProvider{browser: cookies.BrowserFirefox, backend: sweet},
+		cookies.BrowserSafari:   &browserProvider{browser: cookies.BrowserSafari, backend: sweet},
 	}
 }
 

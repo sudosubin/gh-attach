@@ -101,7 +101,7 @@ func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.
 func TestCookieHeaderForURL_DeduplicatesKeysLastWins(t *testing.T) {
 	t.Parallel()
 
-	// Duplicate keys (e.g. kooky folding dFPI cookies into the default container) collapse last-wins instead of failing.
+	// Duplicate keys (e.g. dFPI cookies folded into the default container) collapse last-wins instead of failing.
 	dupes := []*http.Cookie{
 		{Name: "user_session", Value: "stale", Domain: "github.com", Path: "/"},
 		{Name: "user_session", Value: "current", Domain: "github.com", Path: "/"},
