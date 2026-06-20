@@ -9,10 +9,10 @@ func TestExpandSource_Auto(t *testing.T) {
 	if len(expanded) == 0 {
 		t.Fatalf("expected expanded sources")
 	}
-	if expanded[0].Browser != BrowserChrome {
+	if expanded[0].Browser != BrowserArc {
 		t.Fatalf("first browser = %s", expanded[0].Browser)
 	}
-	if expanded[len(expanded)-1].Browser != BrowserSafari {
+	if expanded[len(expanded)-1].Browser != BrowserZen {
 		t.Fatalf("last browser = %s", expanded[len(expanded)-1].Browser)
 	}
 	for _, src := range expanded {
@@ -44,11 +44,53 @@ func TestApplyDefaultProfile_ChromiumFamily(t *testing.T) {
 		BrowserBrave,
 		BrowserVivaldi,
 		BrowserOpera,
+		BrowserArc,
+		BrowserHelium,
+		BrowserDia,
+		BrowserComet,
+		BrowserAtlas,
+		BrowserWhale,
 	} {
 		got := ApplyDefaultProfile(Source{Browser: b})
 		if got.Profile != "Default" {
 			t.Fatalf("browser=%s profile=%q, want %q", b, got.Profile, "Default")
 		}
+	}
+}
+
+func TestApplyDefaultProfile_FirefoxFamilyHasNoDefault(t *testing.T) {
+	t.Parallel()
+
+	for _, b := range []Browser{
+		BrowserFirefox,
+		BrowserZen,
+		BrowserFloorp,
+		BrowserWaterfox,
+		BrowserLibreWolf,
+	} {
+		got := ApplyDefaultProfile(Source{Browser: b})
+		if got.Profile != "" {
+			t.Fatalf("browser=%s profile=%q, want empty", b, got.Profile)
+		}
+	}
+}
+
+func TestBrowserFamilies(t *testing.T) {
+	t.Parallel()
+
+	for _, b := range ConcreteBrowsers() {
+		chromium := b.IsChromium()
+		firefox := b.IsFirefox()
+		if chromium && firefox {
+			t.Fatalf("browser=%s classified as both chromium and firefox", b)
+		}
+		// safari is neither; every other concrete browser is exactly one family.
+		if b != BrowserSafari && !chromium && !firefox {
+			t.Fatalf("browser=%s classified as no family", b)
+		}
+	}
+	if BrowserSafari.IsChromium() || BrowserSafari.IsFirefox() {
+		t.Fatalf("safari should not belong to a family")
 	}
 }
 

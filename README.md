@@ -74,8 +74,8 @@ image.png -> https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-
 ### Options
 
 - `-R, --repo <[HOST/]OWNER/REPO>`: Target repository. Auto detection is available from current repository.
-- `--browser <name>`: Browser to read cookies from (`auto|chrome|chromium|edge|firefox|safari|brave|vivaldi|opera`).
-- `--profile <name>`: Browser profile name. For Firefox multi-account containers, append `:<container-name>` or `:id=<container-id>` to pin a specific container (e.g. `default:Work`, `default:id=2`).
+- `--browser <name>`: Browser to read cookies from (`auto|arc|atlas|brave|chrome|chromium|comet|dia|edge|firefox|floorp|helium|librewolf|opera|safari|vivaldi|waterfox|whale|zen`).
+- `--profile <name>`: Browser profile name. For Firefox-family multi-account containers, append `:<container-name>` or `:id=<container-id>` to pin a specific container (e.g. `default:Work`, `default:id=2`).
 - `--cookie-store-path <path>`: Explicit cookie DB file path.
 - `--json <fields>`: Output JSON with selected fields.
 - `-q, --jq <expression>`: Apply jq filter to JSON output (requires `--json`).
@@ -102,14 +102,14 @@ browsers:
 
 **Schema**
 
-- `browser`: Browser to read cookies from (Required, one of `auto|chrome|chromium|edge|firefox|safari|brave|vivaldi|opera`)
+- `browser`: Browser to read cookies from (Required, one of `auto|arc|atlas|brave|chrome|chromium|comet|dia|edge|firefox|floorp|helium|librewolf|opera|safari|vivaldi|waterfox|whale|zen`)
 - `profile`: Browser profile name/path (Optional, name or path)
 - `cookie_store_path`: Explicit cookie DB file path (Optional)
 
 ## Supported Browsers
 
-- Chromium family (Chrome, Chromium, Edge, Brave, Vivaldi, Opera)
-- Firefox
+- Chromium family (Arc, Atlas, Brave, Chrome, Chromium, Comet, Dia, Edge, Helium, Opera, Vivaldi, Whale)
+- Firefox family (Firefox, Floorp, LibreWolf, Waterfox, Zen)
 - Safari
 
 ## How it works
