@@ -2,15 +2,14 @@
 
 # gh-attach
 
-[![Release](https://img.shields.io/github/v/release/sudosubin/gh-attach?sort=semver)](https://github.com/sudosubin/gh-attach/releases/latest)
-[![Go](https://img.shields.io/badge/go-1.25+-00ADD8?logo=go)](https://go.dev/)
-[![License](https://img.shields.io/github/license/sudosubin/gh-attach)](./LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/sudosubin/gh-attach/total)](https://github.com/sudosubin/gh-attach/releases)
+[![version](https://badgen.net/github/release/sudosubin/gh-attach?label=version)](https://github.com/sudosubin/gh-attach/releases)
+[![license](https://badgen.net/github/license/sudosubin/gh-attach?color=green)](./LICENSE)
+[![downloads](https://badgen.net/github/assets-dl/sudosubin/gh-attach?color=green)](https://github.com/sudosubin/gh-attach/releases)
 
 GitHub user attachment upload CLI for `gh` (GitHub CLI).
 
-<a href="docs/gh-attach.webp">
-  <img src="docs/gh-attach.webp" alt="gh-attach demo" width="800" />
+<a href="docs/assets/gh-attach-demo.webp">
+  <img src="docs/assets/gh-attach-demo.webp" alt="gh-attach demo" width="800" />
 </a>
 
 </div>
@@ -83,7 +82,7 @@ image.png -> https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-
 - `-v, --verbose`: Print cookie source resolution logs to stderr.
 - `-h, --help`: Show help.
 
-## Config File
+## Configuration
 
 You can use a config file to register frequently used browser settings without having to pass them as command line arguments each time.
 
@@ -112,9 +111,20 @@ browsers:
 - Firefox family (Firefox, Floorp, LibreWolf, Waterfox, Zen)
 - Safari
 
-## How it works
+## How It Works
 
 - It first resolves the target repository (`owner/repo`) and the current GitHub login via the `gh` API.
 - Based on CLI flags or config file, it looks up browser cookie sources and selects a session whose [`dotcom_user`](https://docs.github.com/en/site-policy/privacy-policies/github-cookies#cookies) matches the current login.
 - Using that session cookie, it requests GitHub upload policies (`/upload/policies/assets`) and uploads the file binary.
 - It finalizes the user-attachments asset and prints the result as a URL or formatted output via `--json`.
+
+## Development
+
+```sh
+go test ./...
+go build ./...
+```
+
+## License
+
+MIT, see [LICENSE](./LICENSE).
