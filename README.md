@@ -6,7 +6,7 @@
 [![license](https://badgen.net/github/license/sudosubin/gh-attach?color=green)](./LICENSE)
 [![downloads](https://badgen.net/github/assets-dl/sudosubin/gh-attach?color=green)](https://github.com/sudosubin/gh-attach/releases)
 
-GitHub user attachment upload CLI for `gh` (GitHub CLI).
+A GitHub CLI extension that uploads files to GitHub attachments.
 
 <a href="docs/assets/gh-attach-demo.webp">
   <img src="docs/assets/gh-attach-demo.webp" alt="gh-attach demo" width="800" />
