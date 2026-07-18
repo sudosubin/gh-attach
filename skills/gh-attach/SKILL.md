@@ -6,7 +6,7 @@ license: MIT
 
 # gh-attach
 
-`gh attach` uploads a file to GitHub's internal user-attachments endpoint (no public API exists) and prints the **URL only**: you build the markdown. The URL inherits the repo's visibility, so private-repo uploads stay private.
+`gh attach` uploads a file to GitHub's internal user-attachments endpoint (no public API exists) and prints the URL, which GitHub auto-renders (image/video/file) wherever it's pasted. The URL inherits the repo's visibility, so private-repo uploads stay private.
 
 ## Prerequisites
 
@@ -14,31 +14,24 @@ license: MIT
 gh extension list | grep -q 'gh attach' || gh extension install sudosubin/gh-attach
 ```
 
-`gh` must be authenticated for the target host (`gh auth login` if `gh attach` reports a 404/auth error; never run it unattended, it is interactive). The upload itself uses your **browser** `user_session` cookie (not the `gh` token), auto-detected across Chrome/Firefox/Safari/Arc/… Wrong account → add `--browser <name> --profile <name>`. Not for headless/CI (needs a local browser login).
+`gh` must be authenticated (interactive `gh auth login` if it reports a 404/auth error). Uploads use your **browser** session cookie, not the `gh` token; wrong account → add `--browser <name> --profile <name>`. No headless/CI support.
 
 ## Steps
 
-**1. Upload**: one file per call, absolute quoted path; `-R` optional inside a repo (GHES: `-R host/owner/repo`):
+**1. Upload**: absolute quoted path; `-R` optional inside a repo (GHES: `-R host/owner/repo`). Prints one line, the URL; GitHub auto-renders it (image/video/file) so use it as-is:
 
 ```sh
-IFS=$'\t' read -r NAME HREF CT < <(gh attach "$FILE" -R <owner>/<repo> --json name,href,content_type --jq '[.name,.href,.content_type]|@tsv')
+URL=$(gh attach "$FILE" -R <owner>/<repo>)
 ```
 
-**2. Build the reference** from the content type:
+**2. Embed** (always `--body-file -`, e.g. `gh pr comment/edit`, `gh issue comment/edit`):
 
 ```sh
-case "$CT" in image/*) MD="![$NAME]($HREF)";; video/*) MD="$HREF";; *) MD="[$NAME]($HREF)";; esac
-```
-
-**3. Embed**: always `--body-file -` (safe multi-line):
-
-```sh
-printf '## Screenshots\n\n%s\n' "$MD" | gh pr comment <pr> -R <owner>/<repo> --body-file -
-# variants: gh pr edit <pr> --body-file - | gh issue comment|edit <n> --body-file -
+printf '## Screenshots\n\n%s\n' "$URL" | gh pr comment <pr> -R <owner>/<repo> --body-file -
 ```
 
 ## Notes
 
 - Private repo: URL renders only for authorized viewers; anonymous fetch 404/403 is expected.
-- Sizing: embed `<img width="800" src="$HREF">` instead of the bare markdown.
+- Sizing: embed `<img width="800" src="$URL">` instead of the bare URL.
 - Works for images and clean-mime binaries (PDF, zip). Text files (`.txt/.log/.md/.csv/.html`) currently 422 pending a content-type fix.
