@@ -30,26 +30,6 @@ gh extension install sudosubin/gh-attach
 gh attach ./image.png -R owner/repo
 ```
 
-<details>
-<summary>Standalone binary via Homebrew</summary>
-
-This installs the standalone `gh-attach` binary, not the `gh` extension wrapper.
-If you want to run `gh attach`, use the GitHub CLI extension above.
-
-```sh
-brew install --cask sudosubin/gh-attach/gh-attach
-gh-attach ./image.png -R owner/repo
-```
-
-</details>
-
-<details>
-<summary>Standalone binary via GitHub Release</summary>
-
-Open the [latest release](https://github.com/sudosubin/gh-attach/releases/latest) page and download the artifact matching your OS/CPU.
-
-</details>
-
 ## Usage
 
 ```sh
