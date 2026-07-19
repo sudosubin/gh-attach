@@ -37,23 +37,3 @@ checksum:
 
 changelog:
   sort: asc
-
-homebrew_casks:
-  - name: gh-attach
-    ids:
-      - gh-attach
-    binaries:
-      - gh-attach
-    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
-    directory: Casks
-    homepage: "https://github.com/sudosubin/gh-attach"
-    description: "GitHub user attachment upload CLI for gh"
-    skip_upload: auto
-    repository:
-      owner: sudosubin
-      name: homebrew-gh-attach
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    commit_author:
-      name: github-actions[bot]
-      email: 41898282+github-actions[bot]@users.noreply.github.com
