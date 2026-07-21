@@ -2,7 +2,6 @@ package browserprovider
 
 import (
 	"cmp"
-	"encoding/xml"
 	"fmt"
 	"os"
 	"strings"
@@ -21,38 +20,23 @@ func (safariFamily) userAgent(_, version string) string {
 		cmp.Or(version, "26.0")) // fallback; bump to current stable periodically
 }
 
-// safariVersion reads CFBundleShortVersionString from Safari's XML Info.plist (absent off macOS); keys/values are siblings.
+// safariVersion reads CFBundleShortVersionString from Safari's Info.plist (absent off macOS); its <string> value follows the key.
 func safariVersion(plistPath string) string {
-	f, err := os.Open(plistPath)
+	b, err := os.ReadFile(plistPath)
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
-
-	dec := xml.NewDecoder(f)
-	var elem string
-	var atTarget bool
-	for {
-		tok, err := dec.Token()
-		if err != nil {
-			return ""
-		}
-		switch t := tok.(type) {
-		case xml.StartElement:
-			elem = t.Name.Local
-		case xml.CharData:
-			text := strings.TrimSpace(string(t))
-			if text == "" {
-				continue
-			}
-			switch elem {
-			case "key":
-				atTarget = text == "CFBundleShortVersionString"
-			case "string":
-				if atTarget {
-					return text
-				}
-			}
-		}
+	_, after, ok := strings.Cut(string(b), "<key>CFBundleShortVersionString</key>")
+	if !ok {
+		return ""
 	}
+	_, after, ok = strings.Cut(after, "<string>")
+	if !ok {
+		return ""
+	}
+	version, _, ok := strings.Cut(after, "</string>")
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(version)
 }
