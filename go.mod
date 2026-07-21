@@ -4,7 +4,6 @@ go 1.25.0
 
 require (
 	github.com/cli/go-gh/v2 v2.13.0
-	github.com/nzrsky/useragent-generator v1.0.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	github.com/steipete/sweetcookie v0.0.2-0.20260619180219-b3c7c0383e44

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"runtime"
 
-	ua "github.com/nzrsky/useragent-generator/pkg/useragent"
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
 
@@ -39,10 +38,8 @@ func (p *browserProvider) Load(ctx context.Context, host string, source cookies.
 		return nil, err
 	}
 
-	userAgent, err := UserAgentForBrowser(p.browser)
-	if err != nil {
-		return nil, err
-	}
+	// The version is install-wide, so one store path serves every session.
+	userAgent := UserAgent(p.browser, runtime.GOOS, firstStorePath(sets))
 
 	sessions := make([]BrowserSession, 0, len(sets))
 	for _, s := range sets {
@@ -56,6 +53,15 @@ func (p *browserProvider) Load(ctx context.Context, host string, source cookies.
 	return sessions, nil
 }
 
+func firstStorePath(sets []CookieSet) string {
+	for _, s := range sets {
+		if s.StorePath != "" {
+			return s.StorePath
+		}
+	}
+	return ""
+}
+
 func NewDefaultRegistry() map[cookies.Browser]BrowserProvider {
 	sweet := newSweetcookieBackend()
 
@@ -64,38 +70,4 @@ func NewDefaultRegistry() map[cookies.Browser]BrowserProvider {
 		reg[b] = &browserProvider{browser: b, backend: sweet}
 	}
 	return reg
-}
-
-func UserAgentForBrowser(browser cookies.Browser) (string, error) {
-	gen := ua.WithSeed(0)
-
-	switch {
-	case browser == cookies.BrowserEdge:
-		if runtime.GOOS == "windows" {
-			return gen.EdgeWindows(), nil
-		}
-		return gen.Edge(), nil
-	case browser.IsFirefox():
-		switch runtime.GOOS {
-		case "windows":
-			return gen.FirefoxWindows(), nil
-		case "darwin":
-			return gen.FirefoxMac(), nil
-		default:
-			return gen.Firefox(), nil
-		}
-	case browser == cookies.BrowserSafari:
-		return gen.Safari(), nil
-	case browser.IsChromium():
-		switch runtime.GOOS {
-		case "windows":
-			return gen.ChromeWindows(), nil
-		case "darwin":
-			return gen.ChromeMac(), nil
-		default:
-			return gen.ChromeLinux(), nil
-		}
-	default:
-		return gen.Chrome(), nil
-	}
 }

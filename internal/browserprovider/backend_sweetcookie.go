@@ -57,7 +57,11 @@ func (b *sweetcookieBackend) loadMerged(ctx context.Context, host string, source
 	for _, c := range result.Cookies {
 		out = append(out, httpCookie(c))
 	}
-	return []CookieSet{{Profile: source.Profile, Cookies: out}}, nil
+	return []CookieSet{{
+		Profile:   source.Profile,
+		Cookies:   out,
+		StorePath: result.Cookies[0].Source.StorePath,
+	}}, nil
 }
 
 // loadFirefox reads Firefox cookies and groups them by profile and multi-account
@@ -98,6 +102,11 @@ func (b *sweetcookieBackend) loadFirefox(ctx context.Context, host string, sourc
 	sets := finalizeContainerGroups(groups)
 	if len(sets) == 0 {
 		return nil, fmt.Errorf("no cookies found")
+	}
+	// One store path serves all sets: they share the same Firefox install.
+	storePath := result.Cookies[0].Source.StorePath
+	for i := range sets {
+		sets[i].StorePath = storePath
 	}
 	return sets, nil
 }
