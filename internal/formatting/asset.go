@@ -17,9 +17,9 @@ var availableAssetFields = []string{
 	"id",
 	"name",
 	"size",
-	"content_type",
+	"contentType",
 	"href",
-	"original_name",
+	"originalName",
 }
 
 type Options struct {
@@ -36,12 +36,12 @@ func WriteAsset(w io.Writer, asset upload.Asset, opts Options) error {
 	}
 
 	payload := map[string]any{
-		"id":            asset.ID,
-		"name":          asset.Name,
-		"size":          asset.Size,
-		"content_type":  asset.ContentType,
-		"href":          asset.Href,
-		"original_name": asset.OriginalName,
+		"id":           asset.ID,
+		"name":         asset.Name,
+		"size":         asset.Size,
+		"contentType":  asset.ContentType,
+		"href":         asset.Href,
+		"originalName": asset.OriginalName,
 	}
 
 	selected, err := selectFields(payload, opts.JSONFields)
