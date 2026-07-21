@@ -55,7 +55,7 @@ func AddJSONFlags(cmd *cobra.Command, target *JSONFlags, fields []string) {
 				if _, ok := allowed[name]; !ok {
 					sorted := append([]string(nil), fields...)
 					sort.Strings(sorted)
-					return JSONFlagError{fmt.Errorf("Unknown JSON field: %q\nAvailable fields:\n  %s", name, strings.Join(sorted, "\n  "))}
+					return JSONFlagError{fmt.Errorf("unknown JSON field: %q\nAvailable fields:\n  %s", name, strings.Join(sorted, "\n  "))}
 				}
 			}
 		}
@@ -70,7 +70,7 @@ func AddJSONFlags(cmd *cobra.Command, target *JSONFlags, fields []string) {
 		if c == cmd && err.Error() == "flag needs an argument: --json" {
 			sorted := append([]string(nil), fields...)
 			sort.Strings(sorted)
-			return JSONFlagError{fmt.Errorf("Specify one or more comma-separated fields for `--json`:\n  %s", strings.Join(sorted, "\n  "))}
+			return JSONFlagError{fmt.Errorf("specify one or more comma-separated fields for `--json`:\n  %s", strings.Join(sorted, "\n  "))}
 		}
 		if cmd.HasParent() {
 			return cmd.Parent().FlagErrorFunc()(c, err)
@@ -93,7 +93,10 @@ func checkJSONFlags(cmd *cobra.Command) (*JSONFlags, error) {
 	tplFlag := f.Lookup("template")
 
 	if jsonFlag.Changed {
-		jv := jsonFlag.Value.(pflag.SliceValue)
+		jv, ok := jsonFlag.Value.(pflag.SliceValue)
+		if !ok {
+			return nil, fmt.Errorf("--json flag must be a string slice")
+		}
 		return &JSONFlags{
 			Enabled:  true,
 			Fields:   jv.GetSlice(),

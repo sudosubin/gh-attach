@@ -60,7 +60,7 @@ func TestBrowserProviderLoad_ReturnsSessionPerSet(t *testing.T) {
 		browser: cookies.BrowserFirefox,
 		backend: stubBackend{
 			name: "stub",
-			load: func(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
+			load: func(_ context.Context, _ string, source cookies.Source) ([]CookieSet, error) {
 				called = true
 				if source.Browser != cookies.BrowserFirefox {
 					t.Fatalf("source.Browser = %q, want %q", source.Browser, cookies.BrowserFirefox)
@@ -104,7 +104,7 @@ func TestBrowserProviderLoad_FailsOnAutoProviderBrowser(t *testing.T) {
 		browser: cookies.BrowserAuto,
 		backend: stubBackend{
 			name: "stub",
-			load: func(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
+			load: func(_ context.Context, _ string, _ cookies.Source) ([]CookieSet, error) {
 				return []CookieSet{{Cookies: []*http.Cookie{{Name: "dotcom_user", Value: "sudosubin"}}}}, nil
 			},
 		},

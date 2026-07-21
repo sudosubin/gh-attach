@@ -92,7 +92,7 @@ func (r *CookieResolver) Resolve(ctx context.Context, host, ghLogin string, sour
 
 func (r *CookieResolver) logf(format string, args ...any) {
 	if r.verbose && r.stderr != nil {
-		fmt.Fprintf(r.stderr, format, args...)
+		_, _ = fmt.Fprintf(r.stderr, format, args...)
 	}
 }
 

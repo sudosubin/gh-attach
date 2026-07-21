@@ -17,7 +17,7 @@ func newSweetcookieBackend() *sweetcookieBackend {
 	return &sweetcookieBackend{}
 }
 
-func (b *sweetcookieBackend) Name() string {
+func (*sweetcookieBackend) Name() string {
 	return "sweetcookie"
 }
 
@@ -29,7 +29,7 @@ func (b *sweetcookieBackend) Load(ctx context.Context, host string, source cooki
 }
 
 // loadMerged reads a single profile's cookies as one set (Chromium family, Safari).
-func (b *sweetcookieBackend) loadMerged(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
+func (*sweetcookieBackend) loadMerged(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
 	scBrowser, err := toSweetcookieBrowser(source.Browser)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (b *sweetcookieBackend) loadMerged(ctx context.Context, host string, source
 
 // loadFirefox reads Firefox cookies and groups them by profile and multi-account
 // container, applying the "<profile>[:<container>]" selector.
-func (b *sweetcookieBackend) loadFirefox(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
+func (*sweetcookieBackend) loadFirefox(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
 	scBrowser, err := toSweetcookieBrowser(source.Browser)
 	if err != nil {
 		return nil, err

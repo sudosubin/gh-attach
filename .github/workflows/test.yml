@@ -1,4 +1,4 @@
-name: CI
+name: test
 
 on:
   pull_request:
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  test:
     strategy:
       fail-fast: false
       matrix:
@@ -29,11 +29,30 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: gofmt
-        run: test -z "$(gofmt -l .)" || { gofmt -l .; echo 'run gofmt -w .'; exit 1; }
-
       - run: go vet ./...
 
-      - run: go test ./...
+      - run: go test -race -cover ./...
+
+      - run: go build ./...
+
+  cross-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
 
       - run: go build ./...
