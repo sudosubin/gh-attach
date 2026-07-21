@@ -105,7 +105,7 @@ func selectFields(payload map[string]any, fields []string) (map[string]any, erro
 		}
 		v, ok := payload[field]
 		if !ok {
-			return nil, fmt.Errorf("Unknown JSON field: %q\nAvailable fields:\n  %s", field, strings.Join(availableAssetFields, "\n  "))
+			return nil, fmt.Errorf("unknown JSON field: %q\nAvailable fields:\n  %s", field, strings.Join(availableAssetFields, "\n  "))
 		}
 		selected[field] = v
 	}

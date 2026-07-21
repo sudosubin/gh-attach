@@ -1,4 +1,4 @@
-name: CI
+name: lint
 
 on:
   pull_request:
@@ -14,12 +14,8 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  golangci-lint:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
@@ -29,11 +25,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: gofmt
-        run: test -z "$(gofmt -l .)" || { gofmt -l .; echo 'run gofmt -w .'; exit 1; }
-
-      - run: go vet ./...
-
-      - run: go test ./...
-
-      - run: go build ./...
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2

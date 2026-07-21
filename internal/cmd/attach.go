@@ -32,7 +32,7 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
   $ gh attach ./image.png --browser chrome --profile Default # Use a specific browser and profile for cookies
   $ gh attach ./image.png --json id,href,name # Output specific JSON fields`,
 		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			opts.FilePath = args[0]
 			if runF != nil {
 				return runF(opts)

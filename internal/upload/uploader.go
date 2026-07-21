@@ -162,7 +162,7 @@ func (u *Uploader) requestPolicies(ctx context.Context, refererPage *RefererPage
 	if err != nil {
 		return policiesResponse{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return policiesResponse{}, ghapi.HandleHTTPError(resp)
@@ -188,7 +188,7 @@ func (u *Uploader) uploadBinary(ctx context.Context, filePath string, contentTyp
 	if err != nil {
 		return Asset{}, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	payload := &bytes.Buffer{}
 	writer := multipart.NewWriter(payload)
@@ -229,7 +229,7 @@ func (u *Uploader) uploadBinary(ctx context.Context, filePath string, contentTyp
 	if err != nil {
 		return Asset{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return Asset{}, ghapi.HandleHTTPError(resp)
@@ -279,7 +279,7 @@ func (u *Uploader) finalizeAsset(ctx context.Context, policies policiesResponse)
 	if err != nil {
 		return Asset{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return Asset{}, ghapi.HandleHTTPError(resp)

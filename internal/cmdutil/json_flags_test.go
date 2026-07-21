@@ -40,9 +40,9 @@ func TestAddJSONFlags_Errors(t *testing.T) {
 		args []string
 		want string
 	}{
-		{name: "missing json arg", args: []string{"--json"}, want: "Specify one or more comma-separated fields for `--json`"},
+		{name: "missing json arg", args: []string{"--json"}, want: "specify one or more comma-separated fields for `--json`"},
 		{name: "jq without json", args: []string{"--jq", ".href"}, want: "cannot use `--jq` without specifying `--json`"},
-		{name: "unknown field", args: []string{"--json", "nope"}, want: "Unknown JSON field: \"nope\""},
+		{name: "unknown field", args: []string{"--json", "nope"}, want: "unknown JSON field: \"nope\""},
 	}
 
 	for _, tt := range tests {

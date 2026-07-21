@@ -16,7 +16,7 @@ type stubLatestCommitResolver struct {
 	err error
 }
 
-func (r stubLatestCommitResolver) LatestCommitSHA(owner string, name string) (string, error) {
+func (r stubLatestCommitResolver) LatestCommitSHA(_ string, _ string) (string, error) {
 	if r.err != nil {
 		return "", r.err
 	}
@@ -24,7 +24,7 @@ func (r stubLatestCommitResolver) LatestCommitSHA(owner string, name string) (st
 }
 
 func TestIssueNewPageFetcher_ReturnsNilOnStatusCodeError(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
@@ -84,7 +84,7 @@ type stubRefererPageFetcher struct {
 	err   error
 }
 
-func (f *stubRefererPageFetcher) Fetch(ctx context.Context, client *http.Client, cookieHeader string, userAgent string) (*RefererPage, error) {
+func (f *stubRefererPageFetcher) Fetch(_ context.Context, _ *http.Client, _ string, _ string) (*RefererPage, error) {
 	f.calls++
 	return f.page, f.err
 }
