@@ -3,6 +3,7 @@ package browserprovider
 import (
 	"context"
 	"net/http"
+	"runtime"
 	"testing"
 
 	"github.com/sudosubin/gh-attach/internal/cookies"
@@ -28,37 +29,6 @@ func TestNewDefaultRegistry(t *testing.T) {
 	}
 	if len(reg) != len(cookies.ConcreteBrowsers()) {
 		t.Fatalf("registry has %d entries, want %d", len(reg), len(cookies.ConcreteBrowsers()))
-	}
-}
-
-func TestUserAgentForBrowser(t *testing.T) {
-	t.Parallel()
-
-	ff1, err := UserAgentForBrowser(cookies.BrowserFirefox)
-	if err != nil || ff1 == "" {
-		t.Fatalf("firefox user agent error = %v, user-agent = %q", err, ff1)
-	}
-	ff2, err := UserAgentForBrowser(cookies.BrowserFirefox)
-	if err != nil {
-		t.Fatalf("firefox user agent error = %v", err)
-	}
-	if ff1 != ff2 {
-		t.Fatalf("firefox user agent should be deterministic; got %q and %q", ff1, ff2)
-	}
-
-	if got, err := UserAgentForBrowser(cookies.BrowserSafari); err != nil || got == "" {
-		t.Fatalf("safari user agent error = %v, user-agent = %q", err, got)
-	}
-	autoUA, err := UserAgentForBrowser(cookies.BrowserAuto)
-	if err != nil || autoUA == "" {
-		t.Fatalf("auto user agent error = %v, user-agent = %q", err, autoUA)
-	}
-
-	for _, b := range cookies.ConcreteBrowsers() {
-		got, err := UserAgentForBrowser(b)
-		if err != nil || got == "" {
-			t.Fatalf("browser=%s user agent error = %v, user-agent = %q", b, err, got)
-		}
 	}
 }
 
@@ -113,7 +83,7 @@ func TestBrowserProviderLoad_ReturnsSessionPerSet(t *testing.T) {
 	if len(sessions) != 2 {
 		t.Fatalf("len(sessions) = %d, want 2", len(sessions))
 	}
-	wantUA, _ := UserAgentForBrowser(cookies.BrowserFirefox)
+	wantUA := UserAgent(cookies.BrowserFirefox, runtime.GOOS, "")
 	for i, s := range sessions {
 		if s.Browser != cookies.BrowserFirefox {
 			t.Fatalf("session[%d].Browser = %q", i, s.Browser)

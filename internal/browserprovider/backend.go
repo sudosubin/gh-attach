@@ -8,8 +8,9 @@ import (
 )
 
 type CookieSet struct {
-	Profile string
-	Cookies []*http.Cookie
+	Profile   string
+	Cookies   []*http.Cookie
+	StorePath string
 }
 
 type Backend interface {
