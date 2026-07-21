@@ -4,7 +4,7 @@
 
 [![version](https://badgen.net/github/release/sudosubin/gh-attach?label=version)](https://github.com/sudosubin/gh-attach/releases)
 [![license](https://badgen.net/github/license/sudosubin/gh-attach?color=green)](./LICENSE)
-[![downloads](https://badgen.net/github/assets-dl/sudosubin/gh-attach?color=green)](https://github.com/sudosubin/gh-attach/releases)
+[![downloads](https://img.shields.io/github/downloads/sudosubin/gh-attach/total?color=green)](https://github.com/sudosubin/gh-attach/releases)
 
 A GitHub CLI extension that uploads files to GitHub attachments.
 
