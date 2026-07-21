@@ -1,8 +1,14 @@
 package browserprovider
 
 import (
+	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
+	"strings"
 	"testing"
+
+	"github.com/sudosubin/gh-attach/internal/cookies"
 )
 
 func TestSafariVersion(t *testing.T) {
@@ -37,5 +43,29 @@ func TestSafariVersion(t *testing.T) {
 	// then
 	if missing != "" {
 		t.Fatalf("missing plist should yield empty, got %q", missing)
+	}
+}
+
+func TestSafariVersion_RealBundle(t *testing.T) {
+	t.Parallel()
+
+	// given: the real macOS Safari app bundle
+	const plist = "/Applications/Safari.app/Contents/Info.plist"
+	if runtime.GOOS != "darwin" {
+		t.Skip("Safari bundle exists only on macOS")
+	}
+	if _, err := os.Stat(plist); err != nil {
+		t.Skip("Safari not installed")
+	}
+
+	// when: safariVersion parses the installed Info.plist
+	got := safariVersion(plist)
+
+	// then: it yields a dotted numeric version that flows into the User-Agent
+	if !regexp.MustCompile(`^\d+(\.\d+)+$`).MatchString(got) {
+		t.Fatalf("safari version = %q, want a dotted numeric version", got)
+	}
+	if ua := UserAgent(cookies.BrowserSafari, "darwin", ""); !strings.Contains(ua, "Version/"+got+" ") {
+		t.Fatalf("UA %q missing Version/%s", ua, got)
 	}
 }
