@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
 	"github.com/sudosubin/gh-attach/internal/cookies"
 	"github.com/sudosubin/gh-attach/internal/ghapi"
@@ -49,16 +51,6 @@ func (s *Service) Run(ctx context.Context, req Request) (upload.Asset, error) {
 		return upload.Asset{}, fmt.Errorf("init gh api service: %w", err)
 	}
 
-	repo, err := ghService.ResolveRepository(repoSpec.Owner, repoSpec.Name)
-	if err != nil {
-		return upload.Asset{}, fmt.Errorf("resolve repository: %w", err)
-	}
-
-	ghLogin, err := ghService.CurrentLogin()
-	if err != nil {
-		return upload.Asset{}, fmt.Errorf("resolve current login: %w", err)
-	}
-
 	sources, err := cookies.ResolveSources(cookies.ResolveInput{
 		Browser:         req.Browser,
 		Profile:         req.Profile,
@@ -68,10 +60,29 @@ func (s *Service) Run(ctx context.Context, req Request) (upload.Asset, error) {
 		return upload.Asset{}, err
 	}
 
-	resolver := NewCookieResolver(s.providers, req.Verbose, s.stderr)
+	var repo ghapi.Repository
+	var resolved ResolvedCookies
 
-	resolved, err := resolver.Resolve(ctx, repo.Host, ghLogin, sources)
-	if err != nil {
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		var err error
+		repo, err = ghService.ResolveRepository(repoSpec.Owner, repoSpec.Name)
+		if err != nil {
+			return fmt.Errorf("resolve repository: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		ghLogin, err := ghService.CurrentLogin()
+		if err != nil {
+			return fmt.Errorf("resolve current login: %w", err)
+		}
+
+		resolver := NewCookieResolver(s.providers, req.Verbose, s.stderr)
+		resolved, err = resolver.Resolve(gctx, repoSpec.Host, ghLogin, sources)
+		return err
+	})
+	if err := g.Wait(); err != nil {
 		return upload.Asset{}, err
 	}
 
