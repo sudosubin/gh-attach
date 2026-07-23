@@ -39,6 +39,9 @@ https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
 $ gh attach ./image.png -R owner/repo --browser chrome --profile Default
 https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
 
+$ gh attach ./artifact.zip -R owner/repo --cookies-file ~/.config/gh/github-cookies.json
+https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
+
 $ gh attach ./image.png --json id,href,name
 {
   "href": "https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000",
@@ -56,6 +59,7 @@ image.png -> https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-
 - `--browser <name>`: Browser to read cookies from (`auto|arc|atlas|brave|chrome|chromium|comet|dia|edge|firefox|floorp|helium|librewolf|opera|safari|vivaldi|waterfox|whale|zen`).
 - `--profile <name>`: Browser profile name. For Firefox-family multi-account containers, append `:<container-name>` or `:id=<container-id>` to pin a specific container (e.g. `default:Work`, `default:id=2`).
 - `--cookie-store-path <path>`: Explicit cookie DB file path.
+- `--cookies-file <path>`: Read GitHub session cookies from a sweetcookie JSON file instead of probing browsers. Cannot be combined with `--browser`, `--profile`, or `--cookie-store-path`.
 - `--json <fields>`: Output JSON with selected fields.
 - `-q, --jq <expression>`: Apply jq filter to JSON output (requires `--json`).
 - `-t, --template <go-template>`: Format JSON output using Go template (requires `--json`).
@@ -84,6 +88,17 @@ browsers:
 - `browser`: Browser to read cookies from (Required, one of `auto|arc|atlas|brave|chrome|chromium|comet|dia|edge|firefox|floorp|helium|librewolf|opera|safari|vivaldi|waterfox|whale|zen`)
 - `profile`: Browser profile name/path (Optional, name or path)
 - `cookie_store_path`: Explicit cookie DB file path (Optional)
+
+### Cookie JSON escape hatch
+
+Use `--cookies-file` when the browser and `gh attach` cannot share the same
+credential boundary, such as Edge running on Windows while the extension runs
+in WSL. The file must be a JSON cookie array or an object with a `cookies`
+array, and it must include the active `github.com` session plus `dotcom_user`.
+
+The file contains live session credentials. Restrict it to your user, do not
+commit it, and delete it after use. `gh attach` reads the file but does not
+export browser cookies or decrypt Chromium App-Bound cookies.
 
 ## Supported Browsers
 

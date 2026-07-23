@@ -14,7 +14,12 @@ license: MIT
 gh extension list | grep -q 'gh attach' || gh extension install sudosubin/gh-attach
 ```
 
-`gh` must be authenticated (interactive `gh auth login` if it reports a 404/auth error). Uploads use your **browser** session cookie, not the `gh` token; wrong account → add `--browser <name> --profile <name>`. No headless/CI support.
+`gh` must be authenticated (interactive `gh auth login` if it reports a
+404/auth error). Uploads use a GitHub **web session**, not the `gh` token. The
+default path reads browser cookies; wrong account → add `--browser <name>
+--profile <name>`. If the browser cookie store cannot be decrypted from the
+current OS boundary, supply a user-exported sweetcookie JSON file with
+`--cookies-file`. No token-only headless/CI support.
 
 ## Steps
 
@@ -22,6 +27,10 @@ gh extension list | grep -q 'gh attach' || gh extension install sudosubin/gh-att
 
 ```sh
 URL=$(gh attach "$FILE" -R <owner>/<repo>)
+```
+
+```sh
+URL=$(gh attach "$FILE" -R <owner>/<repo> --cookies-file "$COOKIES_FILE")
 ```
 
 **2. Embed** (always `--body-file -`, e.g. `gh pr comment/edit`, `gh issue comment/edit`):
@@ -35,3 +44,7 @@ printf '## Screenshots\n\n%s\n' "$URL" | gh pr comment <pr> -R <owner>/<repo> --
 - Private repo: URL renders only for authorized viewers; anonymous fetch 404/403 is expected.
 - Sizing: embed `<img width="800" src="$URL">` instead of the bare URL.
 - Works for images and clean-mime binaries (PDF, zip). Text files (`.txt/.log/.md/.csv/.html`) currently 422 pending a content-type fix.
+- `--cookies-file` is exclusive with `--browser`, `--profile`, and
+  `--cookie-store-path`; it never falls back to installed browsers.
+- Cookie JSON contains live credentials. Never commit it, restrict access to
+  the current user, and delete it after use.
