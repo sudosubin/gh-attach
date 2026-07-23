@@ -24,7 +24,12 @@ func NewClient(httpClient *http.Client, userAgent string, cookies []*http.Cookie
 	if httpClient == nil {
 		httpClient = &http.Client{}
 	}
-	return &Client{httpClient: httpClient, userAgent: userAgent, cookies: cookies}
+
+	c := &Client{userAgent: userAgent, cookies: cookies}
+	wrapped := *httpClient
+	wrapped.CheckRedirect = c.checkRedirect
+	c.httpClient = &wrapped
+	return c
 }
 
 // Request is a pure description of one multipart HTTP call's shape; DoMultipart turns it into an actual request.
@@ -75,13 +80,8 @@ func (c *Client) DoMultipart(ctx context.Context, req Request) ([]byte, error) {
 	}
 	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
 	httpReq.Header.Set("User-Agent", c.userAgent)
-	// Scoped to the destination host — a real browser never sends session cookies cross-origin.
-	cookieHeader, err := cookieHeaderForURL(c.cookies, req.URL)
-	if err != nil {
+	if err := c.attachCookie(httpReq); err != nil {
 		return nil, err
-	}
-	if cookieHeader != "" {
-		httpReq.Header.Set("Cookie", cookieHeader)
 	}
 
 	resp, err := c.httpClient.Do(httpReq)
@@ -105,12 +105,8 @@ func (c *Client) Get(ctx context.Context, pageURL string) (body []byte, statusCo
 	}
 	setDefaultHeaders(req, pageURL)
 	req.Header.Set("User-Agent", c.userAgent)
-	cookieHeader, err := cookieHeaderForURL(c.cookies, pageURL)
-	if err != nil {
+	if err := c.attachCookie(req); err != nil {
 		return nil, 0, err
-	}
-	if cookieHeader != "" {
-		req.Header.Set("Cookie", cookieHeader)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -133,4 +129,15 @@ func (c *Client) Get(ctx context.Context, pageURL string) (body []byte, statusCo
 func setDefaultHeaders(req *http.Request, referer string) {
 	req.Header.Set("Origin", req.URL.Scheme+"://"+req.URL.Host)
 	req.Header.Set("Referer", referer)
+}
+
+func (c *Client) attachCookie(req *http.Request) error {
+	cookieHeader, err := cookieHeaderForURL(c.cookies, req.URL.String())
+	if err != nil {
+		return err
+	}
+	if cookieHeader != "" {
+		req.Header.Set("Cookie", cookieHeader)
+	}
+	return nil
 }
