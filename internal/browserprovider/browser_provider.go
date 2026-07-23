@@ -69,5 +69,9 @@ func NewDefaultRegistry() map[cookies.Browser]BrowserProvider {
 	for _, b := range cookies.ConcreteBrowsers() {
 		reg[b] = &browserProvider{browser: b, backend: sweet}
 	}
+	reg[cookies.BrowserInline] = &browserProvider{
+		browser: cookies.BrowserInline,
+		backend: sweet,
+	}
 	return reg
 }

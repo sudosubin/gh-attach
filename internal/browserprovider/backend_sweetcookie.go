@@ -1,10 +1,13 @@
 package browserprovider
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	libsweetcookie "github.com/steipete/sweetcookie"
@@ -22,10 +25,55 @@ func (*sweetcookieBackend) Name() string {
 }
 
 func (b *sweetcookieBackend) Load(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
+	if source.Browser == cookies.BrowserInline {
+		return b.loadInline(ctx, host, source)
+	}
 	if source.Browser.IsFirefox() {
 		return b.loadFirefox(ctx, host, source)
 	}
 	return b.loadMerged(ctx, host, source)
+}
+
+func (*sweetcookieBackend) loadInline(ctx context.Context, host string, source cookies.Source) ([]CookieSet, error) {
+	if err := validateInlineCookieFile(source.CookiesFile); err != nil {
+		return nil, err
+	}
+
+	result, err := libsweetcookie.Get(ctx, libsweetcookie.Options{
+		URL:      "https://" + host + "/",
+		Browsers: []libsweetcookie.Browser{libsweetcookie.BrowserInline},
+		Mode:     libsweetcookie.ModeFirst,
+		Inline: libsweetcookie.InlineCookies{
+			File: source.CookiesFile,
+		},
+		Timeout: 30 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Cookies) == 0 {
+		return nil, fmt.Errorf("no usable %s cookies found in --cookies-file", host)
+	}
+
+	out := make([]*http.Cookie, 0, len(result.Cookies))
+	for _, cookie := range result.Cookies {
+		out = append(out, httpCookie(cookie))
+	}
+	return []CookieSet{{Cookies: out}}, nil
+}
+
+func validateInlineCookieFile(path string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read --cookies-file: %w", err)
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return fmt.Errorf("--cookies-file is empty")
+	}
+	if !json.Valid(raw) {
+		return fmt.Errorf("--cookies-file contains invalid JSON")
+	}
+	return nil
 }
 
 // loadMerged reads a single profile's cookies as one set (Chromium family, Safari).

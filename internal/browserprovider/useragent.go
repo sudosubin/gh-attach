@@ -18,6 +18,8 @@ func familyFor(b cookies.Browser) browserFamily {
 		return safariFamily{}
 	case b.IsFirefox():
 		return firefoxFamily{}
+	case b == cookies.BrowserInline:
+		return chromiumFamily{browser: cookies.BrowserChrome}
 	default:
 		return chromiumFamily{browser: b}
 	}

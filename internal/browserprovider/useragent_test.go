@@ -124,6 +124,7 @@ func TestUserAgent_DispatchesByFamily(t *testing.T) {
 		contains string
 		absent   string
 	}{
+		{cookies.BrowserInline, "Chrome/150.0.0.0", "Edg/"},
 		{cookies.BrowserBrave, "Chrome/150.0.0.0", "Edg/"},
 		{cookies.BrowserArc, "Chrome/150.0.0.0", "Edg/"},
 		{cookies.BrowserEdge, "Edg/150.0.0.0", ""},

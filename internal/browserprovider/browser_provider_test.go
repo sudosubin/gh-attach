@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/sudosubin/gh-attach/internal/cookies"
@@ -27,8 +28,15 @@ func TestNewDefaultRegistry(t *testing.T) {
 	if _, ok := reg[cookies.BrowserAuto]; ok {
 		t.Fatalf("auto should not be registered")
 	}
-	if len(reg) != len(cookies.ConcreteBrowsers()) {
-		t.Fatalf("registry has %d entries, want %d", len(reg), len(cookies.ConcreteBrowsers()))
+	inline, ok := reg[cookies.BrowserInline]
+	if !ok {
+		t.Fatalf("inline provider missing from registry")
+	}
+	if got := inline.BackendName(); got != "sweetcookie" {
+		t.Fatalf("inline backend = %q, want sweetcookie", got)
+	}
+	if len(reg) != len(cookies.ConcreteBrowsers())+1 {
+		t.Fatalf("registry has %d entries, want %d", len(reg), len(cookies.ConcreteBrowsers())+1)
 	}
 }
 
@@ -113,5 +121,36 @@ func TestBrowserProviderLoad_FailsOnAutoProviderBrowser(t *testing.T) {
 	_, err := p.Load(t.Context(), "github.com", cookies.Source{})
 	if err == nil {
 		t.Fatalf("Load() error = nil, want non-nil")
+	}
+}
+
+func TestBrowserProviderLoad_InlineUsesFallbackUserAgent(t *testing.T) {
+	t.Parallel()
+
+	path := writeInlineCookieFile(
+		t,
+		`[{"name":"dotcom_user","value":"octocat","domain":".github.com","path":"/"}]`,
+	)
+	provider := NewDefaultRegistry()[cookies.BrowserInline]
+
+	sessions, err := provider.Load(
+		t.Context(),
+		"github.com",
+		cookies.Source{
+			Browser:     cookies.BrowserInline,
+			CookiesFile: path,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("len(sessions) = %d, want 1", len(sessions))
+	}
+	if sessions[0].Browser != cookies.BrowserInline {
+		t.Fatalf("Browser = %q, want %q", sessions[0].Browser, cookies.BrowserInline)
+	}
+	if !strings.HasPrefix(sessions[0].UserAgent, "Mozilla/5.0 ") {
+		t.Fatalf("UserAgent = %q", sessions[0].UserAgent)
 	}
 }
