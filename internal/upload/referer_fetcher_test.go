@@ -9,6 +9,7 @@ import (
 
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
 	"github.com/sudosubin/gh-attach/internal/cookies"
+	"github.com/sudosubin/gh-attach/internal/ghweb"
 )
 
 type stubLatestCommitResolver struct {
@@ -31,7 +32,7 @@ func TestIssueNewPageFetcher_ReturnsNilOnStatusCodeError(t *testing.T) {
 
 	host := mustHost(t, server.URL)
 	fetcher := NewIssueNewPageFetcher(host, "owner/repo")
-	page, err := fetcher.Fetch(context.Background(), server.Client(), "", "")
+	page, err := fetcher.Fetch(t.Context(), ghweb.NewClient(server.Client(), "", nil))
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
 	}
@@ -61,7 +62,7 @@ func TestResolveRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 	}
 
 	refererPage, err := uploader.ResolveRefererPage(
-		context.Background(),
+		t.Context(),
 		[]RefererPageFetcher{
 			NewIssueNewPageFetcher(host, "owner/repo"),
 			NewLatestCommitPageFetcher(host, "owner", "repo", stubLatestCommitResolver{sha: "abc123"}),
@@ -84,7 +85,7 @@ type stubRefererPageFetcher struct {
 	err   error
 }
 
-func (f *stubRefererPageFetcher) Fetch(_ context.Context, _ *http.Client, _ string, _ string) (*RefererPage, error) {
+func (f *stubRefererPageFetcher) Fetch(_ context.Context, _ *ghweb.Client) (*RefererPage, error) {
 	f.calls++
 	return f.page, f.err
 }
@@ -99,7 +100,7 @@ func TestResolveRefererPage_EarlyReturnsOnFirstSuccess(t *testing.T) {
 	}
 
 	resolved, err := uploader.ResolveRefererPage(
-		context.Background(),
+		t.Context(),
 		[]RefererPageFetcher{first, second},
 	)
 	if err != nil {
@@ -121,4 +122,23 @@ func mustHost(t *testing.T, rawURL string) string {
 		t.Fatalf("url.Parse() error = %v", err)
 	}
 	return u.Host
+}
+
+func TestExtractRefererPageMetadata(t *testing.T) {
+	html := `
+		<meta name="csrf-token" content="csrf-1">
+		<meta name="fetch-nonce" content="nonce-1">
+		<meta name="release" content="release-1">
+	`
+
+	meta := extractRefererPageMetadata(html)
+	if meta.AuthenticityToken != "csrf-1" {
+		t.Fatalf("AuthenticityToken = %q, want %q", meta.AuthenticityToken, "csrf-1")
+	}
+	if meta.FetchNonce != "nonce-1" {
+		t.Fatalf("FetchNonce = %q, want %q", meta.FetchNonce, "nonce-1")
+	}
+	if meta.GitHubClientVersion != "release-1" {
+		t.Fatalf("GitHubClientVersion = %q, want %q", meta.GitHubClientVersion, "release-1")
+	}
 }

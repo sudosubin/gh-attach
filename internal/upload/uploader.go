@@ -1,33 +1,29 @@
 package upload
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"maps"
 	"mime"
-	"mime/multipart"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	ghapi "github.com/cli/go-gh/v2/pkg/api"
+	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
+	"github.com/sudosubin/gh-attach/internal/ghweb"
 )
 
 // Uploader carries the shared session context for GitHub user-attachment uploads.
 type Uploader struct {
 	baseURL      string // e.g. "https://github.com"
 	repositoryID int64
-	client       *http.Client
-	userAgent    string
-	cookieHeader string
+	client       *ghweb.Client
+	isEnterprise bool
 }
 
 func NewUploader(host string, repositoryID int64, session browserprovider.BrowserSession, client *http.Client) (*Uploader, error) {
@@ -35,21 +31,11 @@ func NewUploader(host string, repositoryID int64, session browserprovider.Browse
 		return nil, fmt.Errorf("invalid repository id")
 	}
 
-	cookieHeader, err := cookieHeaderForURL(session.Cookies, "https://"+host+"/")
-	if err != nil {
-		return nil, err
-	}
-
-	if client == nil {
-		client = &http.Client{}
-	}
-
 	return &Uploader{
 		baseURL:      "https://" + host,
 		repositoryID: repositoryID,
-		client:       client,
-		userAgent:    session.UserAgent,
-		cookieHeader: cookieHeader,
+		client:       ghweb.NewClient(client, session.UserAgent, session.Cookies),
+		isEnterprise: auth.IsEnterprise(host),
 	}, nil
 }
 
@@ -60,7 +46,7 @@ func (u *Uploader) ResolveRefererPage(ctx context.Context, fetchers []RefererPag
 
 	var errs []error
 	for _, fetcher := range fetchers {
-		page, err := fetcher.Fetch(ctx, u.client, u.cookieHeader, u.userAgent)
+		page, err := fetcher.Fetch(ctx, u.client)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -95,17 +81,25 @@ func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *Ref
 		contentType = "application/octet-stream"
 	}
 
-	policies, err := u.requestPolicies(ctx, refererPage, fileName, fileInfo.Size(), contentType)
+	if u.isEnterprise {
+		return u.uploadEnterpriseFlow(ctx, filePath, refererPage, fileName, fileInfo.Size(), contentType)
+	}
+	return u.uploadCloudFlow(ctx, filePath, refererPage, fileName, fileInfo.Size(), contentType)
+}
+
+// uploadCloudFlow is github.com's 3-step upload: policies -> S3 -> finalize. See docs/API_REFERENCE.md.
+func (u *Uploader) uploadCloudFlow(ctx context.Context, filePath string, refererPage *RefererPage, fileName string, fileSize int64, contentType string) (Asset, error) {
+	policies, err := u.requestPoliciesCloud(ctx, refererPage, fileName, fileSize, contentType)
 	if err != nil {
 		return Asset{}, err
 	}
 
-	uploadedAsset, err := u.uploadBinary(ctx, filePath, contentType, policies)
+	uploadedAsset, err := u.uploadBinaryCloud(ctx, filePath, contentType, policies, refererPage.URL)
 	if err != nil {
 		return Asset{}, err
 	}
 
-	asset, err := u.finalizeAsset(ctx, policies)
+	asset, err := u.finalizeAssetCloud(ctx, policies, refererPage)
 	if err != nil {
 		if uploadedAsset.Href != "" {
 			return uploadedAsset, nil
@@ -123,52 +117,65 @@ func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *Ref
 	return asset, nil
 }
 
-func (u *Uploader) requestPolicies(ctx context.Context, refererPage *RefererPage, fileName string, fileSize int64, contentType string) (policiesResponse, error) {
+// uploadEnterpriseFlow is GHES's 2-step upload: policies -> media host (no finalize step). See docs/API_REFERENCE.md.
+func (u *Uploader) uploadEnterpriseFlow(ctx context.Context, filePath string, refererPage *RefererPage, fileName string, fileSize int64, contentType string) (Asset, error) {
+	policies, err := u.requestPoliciesEnterprise(ctx, refererPage, fileName, fileSize, contentType)
+	if err != nil {
+		return Asset{}, err
+	}
+	return u.uploadBinaryEnterprise(ctx, filePath, contentType, policies, u.baseURL+"/")
+}
+
+// requestPoliciesCloud authenticates via X-Fetch-Nonce/X-GitHub-Client-Version, never authenticity_token.
+func (u *Uploader) requestPoliciesCloud(ctx context.Context, refererPage *RefererPage, fileName string, fileSize int64, contentType string) (policiesResponse, error) {
 	refererMeta := extractRefererPageMetadata(string(refererPage.Body))
 
-	payload := &bytes.Buffer{}
-	writer := multipart.NewWriter(payload)
-	_ = writer.WriteField("repository_id", strconv.FormatInt(u.repositoryID, 10))
-	_ = writer.WriteField("name", fileName)
-	_ = writer.WriteField("size", strconv.FormatInt(fileSize, 10))
-	_ = writer.WriteField("content_type", contentType)
-	if refererMeta.AuthenticityToken != "" {
-		_ = writer.WriteField("authenticity_token", refererMeta.AuthenticityToken)
-	}
-	if err := writer.Close(); err != nil {
-		return policiesResponse{}, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.baseURL+"/upload/policies/assets", payload)
-	if err != nil {
-		return policiesResponse{}, err
-	}
-	setDefaultHeaders(req, refererPage.URL)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-	req.Header.Set("GitHub-Verified-Fetch", "true")
+	headers := map[string]string{}
 	if strings.TrimSpace(refererMeta.FetchNonce) != "" {
-		req.Header.Set("X-Fetch-Nonce", refererMeta.FetchNonce)
+		headers["X-Fetch-Nonce"] = refererMeta.FetchNonce
 	}
 	if strings.TrimSpace(refererMeta.GitHubClientVersion) != "" {
-		req.Header.Set("X-GitHub-Client-Version", refererMeta.GitHubClientVersion)
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	if u.cookieHeader != "" {
-		setCookieAndUserAgent(req, u.cookieHeader, u.userAgent)
+		headers["X-GitHub-Client-Version"] = refererMeta.GitHubClientVersion
 	}
 
-	resp, err := u.client.Do(req)
-	if err != nil {
-		return policiesResponse{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
+	return u.requestPolicies(ctx, refererPage.URL, u.policiesFields(fileName, fileSize, contentType), headers)
+}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return policiesResponse{}, ghapi.HandleHTTPError(resp)
+// requestPoliciesEnterprise authenticates via authenticity_token and fails fast if it's missing from the referer page.
+func (u *Uploader) requestPoliciesEnterprise(ctx context.Context, refererPage *RefererPage, fileName string, fileSize int64, contentType string) (policiesResponse, error) {
+	refererMeta := extractRefererPageMetadata(string(refererPage.Body))
+	if refererMeta.AuthenticityToken == "" {
+		return policiesResponse{}, fmt.Errorf("enterprise host requires an authenticity_token, but none was found on the referer page")
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	fields := u.policiesFields(fileName, fileSize, contentType)
+	fields["authenticity_token"] = refererMeta.AuthenticityToken
+
+	return u.requestPolicies(ctx, refererPage.URL, fields, map[string]string{})
+}
+
+func (u *Uploader) policiesFields(fileName string, fileSize int64, contentType string) map[string]string {
+	return map[string]string{
+		"repository_id": strconv.FormatInt(u.repositoryID, 10),
+		"name":          fileName,
+		"size":          strconv.FormatInt(fileSize, 10),
+		"content_type":  contentType,
+	}
+}
+
+// requestPolicies posts to /upload/policies/assets; GitHub-Verified-Fetch is required on both deployment types.
+func (u *Uploader) requestPolicies(ctx context.Context, refererURL string, fields, headers map[string]string) (policiesResponse, error) {
+	headers["Accept"] = "application/json"
+	headers["X-Requested-With"] = "XMLHttpRequest"
+	headers["GitHub-Verified-Fetch"] = "true"
+
+	body, err := u.client.DoMultipart(ctx, ghweb.Request{
+		Method:  http.MethodPost,
+		URL:     u.baseURL + "/upload/policies/assets",
+		Fields:  fields,
+		Headers: headers,
+		Referer: refererURL,
+	})
 	if err != nil {
 		return policiesResponse{}, err
 	}
@@ -183,60 +190,26 @@ func (u *Uploader) requestPolicies(ctx context.Context, refererPage *RefererPage
 	return out, nil
 }
 
-func (u *Uploader) uploadBinary(ctx context.Context, filePath string, contentType string, policies policiesResponse) (Asset, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return Asset{}, err
-	}
-	defer func() { _ = file.Close() }()
-
-	payload := &bytes.Buffer{}
-	writer := multipart.NewWriter(payload)
-	for k, v := range policies.Form {
-		_ = writer.WriteField(k, v)
-	}
-
-	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
-	if err != nil {
-		return Asset{}, err
-	}
-	if _, err := io.Copy(part, file); err != nil {
-		return Asset{}, err
-	}
-	if err := writer.Close(); err != nil {
-		return Asset{}, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, policies.UploadURL, payload)
-	if err != nil {
-		return Asset{}, err
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
+// uploadBinaryCloud PUTs to the S3 presigned URL; an empty/unparsable body isn't an error since finalizeAssetCloud fills in the asset.
+func (u *Uploader) uploadBinaryCloud(ctx context.Context, filePath string, contentType string, policies policiesResponse, refererURL string) (Asset, error) {
+	headers := make(map[string]string, len(policies.Header)+1)
+	maps.Copy(headers, policies.Header)
 	if contentType != "" {
-		req.Header.Set("X-File-Content-Type", contentType)
-	}
-	for k, v := range policies.Header {
-		req.Header.Set(k, v)
-	}
-	if policies.SameOrigin && policies.UploadAuthenticityToken != "" {
-		req.Header.Set("authenticity_token", policies.UploadAuthenticityToken)
-	}
-	if u.cookieHeader != "" {
-		setCookieAndUserAgent(req, u.cookieHeader, u.userAgent)
+		headers["X-File-Content-Type"] = contentType
 	}
 
-	resp, err := u.client.Do(req)
+	body, err := u.client.DoMultipart(ctx, ghweb.Request{
+		Method:   http.MethodPost,
+		URL:      policies.UploadURL,
+		Fields:   policies.Form,
+		Headers:  headers,
+		FilePath: filePath,
+		Referer:  refererURL,
+	})
 	if err != nil {
 		return Asset{}, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Asset{}, ghapi.HandleHTTPError(resp)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil || len(body) == 0 {
+	if len(body) == 0 {
 		return Asset{}, nil
 	}
 
@@ -247,45 +220,73 @@ func (u *Uploader) uploadBinary(ctx context.Context, filePath string, contentTyp
 	return asset, nil
 }
 
-func (u *Uploader) finalizeAsset(ctx context.Context, policies policiesResponse) (Asset, error) {
-	if policies.AssetUploadURL == "" {
-		return policies.Asset, nil
+// uploadBinaryEnterprise POSTs to the media host; the response IS the finished asset, so a missing href is a real error.
+func (u *Uploader) uploadBinaryEnterprise(ctx context.Context, filePath string, contentType string, policies policiesResponse, refererURL string) (Asset, error) {
+	fields := make(map[string]string, len(policies.Form)+1)
+	maps.Copy(fields, policies.Form)
+	if policies.UploadAuthenticityToken != "" {
+		fields["authenticity_token"] = policies.UploadAuthenticityToken
 	}
 
-	payload := &bytes.Buffer{}
-	writer := multipart.NewWriter(payload)
-	_ = writer.WriteField("authenticity_token", policies.AssetUploadAuthenticityToken)
-	if err := writer.Close(); err != nil {
+	headers := make(map[string]string, len(policies.Header)+1)
+	maps.Copy(headers, policies.Header)
+	if contentType != "" {
+		headers["X-File-Content-Type"] = contentType
+	}
+
+	body, err := u.client.DoMultipart(ctx, ghweb.Request{
+		Method:   http.MethodPost,
+		URL:      policies.UploadURL,
+		Fields:   fields,
+		Headers:  headers,
+		FilePath: filePath,
+		Referer:  refererURL,
+	})
+	if err != nil {
 		return Asset{}, err
+	}
+
+	var asset Asset
+	if err := json.Unmarshal(body, &asset); err != nil {
+		return Asset{}, fmt.Errorf("enterprise media upload response: %w", err)
+	}
+	if asset.Href == "" {
+		return Asset{}, fmt.Errorf("enterprise media upload response missing href")
+	}
+	return asset, nil
+}
+
+// finalizeAssetCloud PUTs to asset_upload_url to mark the asset ready; only the cloud flow calls this.
+func (u *Uploader) finalizeAssetCloud(ctx context.Context, policies policiesResponse, refererPage *RefererPage) (Asset, error) {
+	if policies.AssetUploadURL == "" {
+		return policies.Asset, nil
 	}
 
 	finalURL := policies.AssetUploadURL
 	if strings.HasPrefix(finalURL, "/") {
 		finalURL = u.baseURL + finalURL
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, finalURL, payload)
-	if err != nil {
-		return Asset{}, err
+
+	// Same fetch-nonce pair as the policies request, from the same referer page.
+	refererMeta := extractRefererPageMetadata(string(refererPage.Body))
+	headers := map[string]string{
+		"Accept":           "application/json",
+		"X-Requested-With": "XMLHttpRequest",
 	}
-	setDefaultHeaders(req, u.baseURL+"/")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	if u.cookieHeader != "" {
-		setCookieAndUserAgent(req, u.cookieHeader, u.userAgent)
+	if strings.TrimSpace(refererMeta.FetchNonce) != "" {
+		headers["X-Fetch-Nonce"] = refererMeta.FetchNonce
+	}
+	if strings.TrimSpace(refererMeta.GitHubClientVersion) != "" {
+		headers["X-GitHub-Client-Version"] = refererMeta.GitHubClientVersion
 	}
 
-	resp, err := u.client.Do(req)
-	if err != nil {
-		return Asset{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Asset{}, ghapi.HandleHTTPError(resp)
-	}
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := u.client.DoMultipart(ctx, ghweb.Request{
+		Method:  http.MethodPut,
+		URL:     finalURL,
+		Fields:  map[string]string{"authenticity_token": policies.AssetUploadAuthenticityToken},
+		Headers: headers,
+		Referer: refererPage.URL,
+	})
 	if err != nil {
 		return Asset{}, err
 	}
@@ -298,47 +299,4 @@ func (u *Uploader) finalizeAsset(ctx context.Context, policies policiesResponse)
 		return policies.Asset, nil
 	}
 	return asset, nil
-}
-
-func cookieHeaderForURL(cookies []*http.Cookie, rawURL string) (string, error) {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "", err
-	}
-
-	// Collapse duplicate (Name, Domain, Path) keys last-wins; Firefox folds dFPI/private-browsing cookies into the default container.
-	type cookieKey struct{ name, domain, path string }
-	index := map[cookieKey]int{}
-	deduped := make([]*http.Cookie, 0, len(cookies))
-	for _, c := range cookies {
-		key := cookieKey{c.Name, c.Domain, c.Path}
-		if i, ok := index[key]; ok {
-			deduped[i] = c
-			continue
-		}
-		index[key] = len(deduped)
-		deduped = append(deduped, c)
-	}
-
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		return "", err
-	}
-	jar.SetCookies(u, deduped)
-
-	pairs := make([]string, 0, len(deduped))
-	for _, c := range jar.Cookies(u) {
-		pairs = append(pairs, c.Name+"="+c.Value)
-	}
-	return strings.Join(pairs, "; "), nil
-}
-
-func setDefaultHeaders(req *http.Request, referer string) {
-	req.Header.Set("Origin", req.URL.Scheme+"://"+req.URL.Host)
-	req.Header.Set("Referer", referer)
-}
-
-func setCookieAndUserAgent(req *http.Request, cookieHeader string, userAgent string) {
-	req.Header.Set("Cookie", cookieHeader)
-	req.Header.Set("User-Agent", userAgent)
 }

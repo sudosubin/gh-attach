@@ -3,8 +3,10 @@ package upload
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
+	"regexp"
+
+	"github.com/sudosubin/gh-attach/internal/ghweb"
 )
 
 // RefererPage is a GitHub page whose URL and CSRF tokens are used as the upload referer context.
@@ -14,7 +16,7 @@ type RefererPage struct {
 }
 
 type RefererPageFetcher interface {
-	Fetch(ctx context.Context, client *http.Client, cookieHeader string, userAgent string) (*RefererPage, error)
+	Fetch(ctx context.Context, client *ghweb.Client) (*RefererPage, error)
 }
 
 type LatestCommitSHAResolver interface {
@@ -30,13 +32,9 @@ type issueNewPageFetcher struct {
 	repoFullName string
 }
 
-func (f issueNewPageFetcher) Fetch(ctx context.Context, client *http.Client, cookieHeader string, userAgent string) (*RefererPage, error) {
+func (f issueNewPageFetcher) Fetch(ctx context.Context, client *ghweb.Client) (*RefererPage, error) {
 	pageURL := fmt.Sprintf("https://%s/%s/issues/new", f.host, f.repoFullName)
-	body, err := fetchPageBody(ctx, client, pageURL, cookieHeader, userAgent)
-	if err != nil || body == nil {
-		return nil, err
-	}
-	return &RefererPage{URL: pageURL, Body: body}, nil
+	return fetchRefererPage(ctx, client, pageURL)
 }
 
 func NewLatestCommitPageFetcher(host string, owner string, name string, resolver LatestCommitSHAResolver) RefererPageFetcher {
@@ -50,7 +48,7 @@ type latestCommitPageFetcher struct {
 	resolver LatestCommitSHAResolver
 }
 
-func (f latestCommitPageFetcher) Fetch(ctx context.Context, client *http.Client, cookieHeader string, userAgent string) (*RefererPage, error) {
+func (f latestCommitPageFetcher) Fetch(ctx context.Context, client *ghweb.Client) (*RefererPage, error) {
 	if f.resolver == nil {
 		return nil, fmt.Errorf("latest commit resolver is required")
 	}
@@ -61,36 +59,48 @@ func (f latestCommitPageFetcher) Fetch(ctx context.Context, client *http.Client,
 	}
 
 	pageURL := fmt.Sprintf("https://%s/%s/%s/commit/%s", f.host, f.owner, f.name, sha)
-	body, err := fetchPageBody(ctx, client, pageURL, cookieHeader, userAgent)
-	if err != nil || body == nil {
+	return fetchRefererPage(ctx, client, pageURL)
+}
+
+// fetchRefererPage treats non-200 as "try the next fetcher," not an error; only a transport failure is.
+func fetchRefererPage(ctx context.Context, client *ghweb.Client, pageURL string) (*RefererPage, error) {
+	body, status, err := client.Get(ctx, pageURL)
+	if err != nil {
 		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, nil
 	}
 	return &RefererPage{URL: pageURL, Body: body}, nil
 }
 
-func fetchPageBody(ctx context.Context, client *http.Client, pageURL string, cookieHeader string, userAgent string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
-	if err != nil {
-		return nil, err
+type refererPageMetadata struct {
+	AuthenticityToken   string
+	FetchNonce          string
+	GitHubClientVersion string
+}
+
+var (
+	authTokenInputPattern          = regexp.MustCompile(`name=["']authenticity_token["'][^>]*value=["']([^"']+)["']`)
+	csrfMetaPattern                = regexp.MustCompile(`<meta[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']`)
+	fetchNonceMetaPattern          = regexp.MustCompile(`<meta[^>]*name=["']fetch-nonce["'][^>]*content=["']([^"']+)["']`)
+	githubClientVersionMetaPattern = regexp.MustCompile(`<meta[^>]*name=["']release["'][^>]*content=["']([^"']+)["']`)
+)
+
+func extractRefererPageMetadata(html string) refererPageMetadata {
+	meta := refererPageMetadata{}
+
+	if m := authTokenInputPattern.FindStringSubmatch(html); len(m) > 1 {
+		meta.AuthenticityToken = m[1]
+	} else if m := csrfMetaPattern.FindStringSubmatch(html); len(m) > 1 {
+		meta.AuthenticityToken = m[1]
 	}
-	setDefaultHeaders(req, pageURL)
-	if cookieHeader != "" {
-		setCookieAndUserAgent(req, cookieHeader, userAgent)
+	if m := fetchNonceMetaPattern.FindStringSubmatch(html); len(m) > 1 {
+		meta.FetchNonce = m[1]
+	}
+	if m := githubClientVersionMetaPattern.FindStringSubmatch(html); len(m) > 1 {
+		meta.GitHubClientVersion = m[1]
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, nil
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	return body, nil
+	return meta
 }
