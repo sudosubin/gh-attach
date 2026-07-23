@@ -124,6 +124,16 @@ func mustHost(t *testing.T, rawURL string) string {
 	return u.Host
 }
 
+func mustOrigin(t *testing.T, rawURL string) string {
+	t.Helper()
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("url.Parse() error = %v", err)
+	}
+	return u.Scheme + "://" + u.Host
+}
+
 func TestExtractRefererPageMetadata(t *testing.T) {
 	html := `
 		<meta name="csrf-token" content="csrf-1">

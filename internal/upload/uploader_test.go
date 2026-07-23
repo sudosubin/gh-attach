@@ -250,37 +250,42 @@ func TestUploadEnterpriseFlow_SkipsFinalize(t *testing.T) {
 	}
 }
 
-func TestUploadEnterpriseFlow_MediaHostRefererIsBareOrigin(t *testing.T) {
+func TestUploadEnterpriseFlow_MediaHostGetsGHESOriginNotItsOwn(t *testing.T) {
 	tmpFile := t.TempDir() + "/probe.png"
 	if err := os.WriteFile(tmpFile, []byte("probe"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	var mediaReferer string
+	var mediaReferer, mediaOrigin string
 
-	mux := http.NewServeMux()
-	server := httptest.NewServer(mux)
-	defer server.Close()
+	ghesMux := http.NewServeMux()
+	ghesServer := httptest.NewServer(ghesMux)
+	defer ghesServer.Close()
 
-	mux.HandleFunc("/upload/policies/assets", func(w http.ResponseWriter, _ *http.Request) {
+	mediaMux := http.NewServeMux()
+	mediaServer := httptest.NewServer(mediaMux)
+	defer mediaServer.Close()
+
+	ghesMux.HandleFunc("/upload/policies/assets", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"upload_url":"` + server.URL + `/media/upload","form":{},"header":{}}`))
+		_, _ = w.Write([]byte(`{"upload_url":"` + mediaServer.URL + `/media/upload","form":{},"header":{}}`))
 	})
-	mux.HandleFunc("/media/upload", func(w http.ResponseWriter, r *http.Request) {
+	mediaMux.HandleFunc("/media/upload", func(w http.ResponseWriter, r *http.Request) {
 		mediaReferer = r.Header.Get("Referer")
+		mediaOrigin = r.Header.Get("Origin")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"id":1,"href":"https://github.enterprise.test/user-attachments/assets/abc"}`))
 	})
 
 	u := &Uploader{
-		baseURL:      server.URL,
+		baseURL:      ghesServer.URL,
 		repositoryID: 1,
-		client:       ghweb.NewClient(server.Client(), "", nil),
+		client:       ghweb.NewClient(ghesServer.Client(), "", nil),
 		isEnterprise: true,
 	}
 
 	refererPage := &RefererPage{
-		URL:  server.URL + "/owner/repo/issues/new",
+		URL:  ghesServer.URL + "/owner/repo/issues/new",
 		Body: []byte(`<input name="authenticity_token" value="ghes-token">`),
 	}
 
@@ -288,10 +293,13 @@ func TestUploadEnterpriseFlow_MediaHostRefererIsBareOrigin(t *testing.T) {
 		t.Fatalf("Upload() error = %v", err)
 	}
 
-	// media.<host> is cross-subdomain, so the referer is trimmed to the bare origin (verified live).
-	want := server.URL + "/"
+	// media.<host> is a different host, so referer/origin are the GHES host's bare origin, not the media host's.
+	want := ghesServer.URL + "/"
 	if mediaReferer != want {
-		t.Fatalf("media upload Referer = %q, want %q (bare origin, not the full referer page URL)", mediaReferer, want)
+		t.Fatalf("media upload Referer = %q, want %q", mediaReferer, want)
+	}
+	if ghesOrigin := mustOrigin(t, ghesServer.URL); mediaOrigin != ghesOrigin {
+		t.Fatalf("media upload Origin = %q, want %q (the GHES host, not the media host)", mediaOrigin, ghesOrigin)
 	}
 }
 
@@ -301,22 +309,27 @@ func TestUploadCloudFlow_UsesRefererPageURLConsistently(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	var policiesReferer, uploadReferer, finalizeReferer string
+	var policiesReferer, uploadReferer, uploadOrigin, finalizeReferer string
 	var finalizeFetchNonce, finalizeClientVersion string
 
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
+	s3Mux := http.NewServeMux()
+	s3Server := httptest.NewServer(s3Mux)
+	defer s3Server.Close()
+
 	const refererURL = "issues/new-referer" // sentinel; real value set below once server.URL is known
 
 	mux.HandleFunc("/upload/policies/assets", func(w http.ResponseWriter, r *http.Request) {
 		policiesReferer = r.Header.Get("Referer")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"upload_url":"` + server.URL + `/s3","form":{},"header":{},"asset_upload_url":"/upload/assets/1","asset_upload_authenticity_token":"final-token"}`))
+		_, _ = w.Write([]byte(`{"upload_url":"` + s3Server.URL + `/s3","form":{},"header":{},"asset_upload_url":"/upload/assets/1","asset_upload_authenticity_token":"final-token"}`))
 	})
-	mux.HandleFunc("/s3", func(w http.ResponseWriter, r *http.Request) {
+	s3Mux.HandleFunc("/s3", func(w http.ResponseWriter, r *http.Request) {
 		uploadReferer = r.Header.Get("Referer")
+		uploadOrigin = r.Header.Get("Origin")
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("/upload/assets/1", func(w http.ResponseWriter, r *http.Request) {
@@ -355,6 +368,10 @@ func TestUploadCloudFlow_UsesRefererPageURLConsistently(t *testing.T) {
 		if got != refererPage.URL {
 			t.Fatalf("%s = %q, want %q (all three steps should use the same referer page URL)", label, got, refererPage.URL)
 		}
+	}
+	// S3 is a different host, so Origin must reflect the initiating host, not S3's.
+	if serverOrigin := mustOrigin(t, server.URL); uploadOrigin != serverOrigin {
+		t.Fatalf("upload Origin = %q, want %q (the initiating host, not S3's)", uploadOrigin, serverOrigin)
 	}
 	if finalizeFetchNonce != "nonce-xyz" {
 		t.Fatalf("finalize X-Fetch-Nonce = %q, want %q", finalizeFetchNonce, "nonce-xyz")

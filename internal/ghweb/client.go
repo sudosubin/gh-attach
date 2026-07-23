@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -73,7 +74,9 @@ func (c *Client) DoMultipart(ctx context.Context, req Request) ([]byte, error) {
 		return nil, err
 	}
 	if req.Referer != "" {
-		setDefaultHeaders(httpReq, req.Referer)
+		if err := setDefaultHeaders(httpReq, req.Referer); err != nil {
+			return nil, err
+		}
 	}
 	for k, v := range req.Headers {
 		httpReq.Header.Set(k, v)
@@ -103,7 +106,9 @@ func (c *Client) Get(ctx context.Context, pageURL string) (body []byte, statusCo
 	if err != nil {
 		return nil, 0, err
 	}
-	setDefaultHeaders(req, pageURL)
+	if err := setDefaultHeaders(req, pageURL); err != nil {
+		return nil, 0, err
+	}
 	req.Header.Set("User-Agent", c.userAgent)
 	if err := c.attachCookie(req); err != nil {
 		return nil, 0, err
@@ -126,9 +131,14 @@ func (c *Client) Get(ctx context.Context, pageURL string) (body []byte, statusCo
 	return body, resp.StatusCode, nil
 }
 
-func setDefaultHeaders(req *http.Request, referer string) {
-	req.Header.Set("Origin", req.URL.Scheme+"://"+req.URL.Host)
+func setDefaultHeaders(req *http.Request, referer string) error {
+	refURL, err := url.Parse(referer)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Origin", refURL.Scheme+"://"+refURL.Host)
 	req.Header.Set("Referer", referer)
+	return nil
 }
 
 func (c *Client) attachCookie(req *http.Request) error {
