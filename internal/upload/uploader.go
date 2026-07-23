@@ -87,7 +87,7 @@ func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *Ref
 	return u.uploadCloudFlow(ctx, filePath, refererPage, fileName, fileInfo.Size(), contentType)
 }
 
-// uploadCloudFlow is github.com's 3-step upload: policies -> S3 -> finalize. See docs/API_REFERENCE.md.
+// uploadCloudFlow is github.com's 3-step upload: policies -> S3 -> finalize.
 func (u *Uploader) uploadCloudFlow(ctx context.Context, filePath string, refererPage *RefererPage, fileName string, fileSize int64, contentType string) (Asset, error) {
 	policies, err := u.requestPoliciesCloud(ctx, refererPage, fileName, fileSize, contentType)
 	if err != nil {
@@ -117,7 +117,7 @@ func (u *Uploader) uploadCloudFlow(ctx context.Context, filePath string, referer
 	return asset, nil
 }
 
-// uploadEnterpriseFlow is GHES's 2-step upload: policies -> media host (no finalize step). See docs/API_REFERENCE.md.
+// uploadEnterpriseFlow is GHES's 2-step upload: policies -> media host (no finalize step).
 func (u *Uploader) uploadEnterpriseFlow(ctx context.Context, filePath string, refererPage *RefererPage, fileName string, fileSize int64, contentType string) (Asset, error) {
 	policies, err := u.requestPoliciesEnterprise(ctx, refererPage, fileName, fileSize, contentType)
 	if err != nil {
