@@ -17,6 +17,7 @@ type AttachOptions struct {
 	Browser         string
 	Profile         string
 	CookieStorePath string
+	CookiesFile     string
 	JSON            cmdutil.JSONFlags
 	Verbose         bool
 }
@@ -45,6 +46,7 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
 	cmd.Flags().StringVar(&opts.Browser, "browser", "", "Browser to use ("+cookies.BrowserChoices()+")")
 	cmd.Flags().StringVar(&opts.Profile, "profile", "", "Browser profile name")
 	cmd.Flags().StringVar(&opts.CookieStorePath, "cookie-store-path", "", "Cookie store file path")
+	cmd.Flags().StringVar(&opts.CookiesFile, "cookies-file", "", "Read GitHub session cookies from a sweetcookie JSON file")
 	cmd.Flags().BoolVarP(&opts.Verbose, "verbose", "v", false, "Verbose output")
 
 	cmdutil.AddJSONFlags(cmd, &opts.JSON, formatting.AvailableJSONFields())
@@ -62,6 +64,7 @@ func attachRun(opts *AttachOptions) error {
 		Browser:         opts.Browser,
 		Profile:         opts.Profile,
 		CookieStorePath: opts.CookieStorePath,
+		CookiesFile:     opts.CookiesFile,
 		Verbose:         opts.Verbose,
 	})
 	if err != nil {

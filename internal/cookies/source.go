@@ -9,7 +9,8 @@ import (
 type Browser string
 
 const (
-	BrowserAuto Browser = "auto"
+	BrowserAuto   Browser = "auto"
+	BrowserInline Browser = "inline"
 
 	BrowserArc       Browser = "arc"
 	BrowserAtlas     Browser = "atlas"
@@ -44,6 +45,7 @@ type Source struct {
 	Browser         Browser
 	Profile         string
 	CookieStorePath string
+	CookiesFile     string
 }
 
 // allBrowsers is the canonical set of concrete (non-auto) browsers, alphabetical.

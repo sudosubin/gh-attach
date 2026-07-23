@@ -11,9 +11,39 @@ type ResolveInput struct {
 	Browser         string
 	Profile         string
 	CookieStorePath string
+	CookiesFile     string
 }
 
 func ResolveSources(in ResolveInput) ([]Source, error) {
+	cookiesFile := strings.TrimSpace(in.CookiesFile)
+	if in.CookiesFile != "" {
+		if cookiesFile == "" {
+			return nil, fmt.Errorf("--cookies-file cannot be empty")
+		}
+
+		conflicts := make([]string, 0, 3)
+		if strings.TrimSpace(in.Browser) != "" {
+			conflicts = append(conflicts, "--browser")
+		}
+		if strings.TrimSpace(in.Profile) != "" {
+			conflicts = append(conflicts, "--profile")
+		}
+		if strings.TrimSpace(in.CookieStorePath) != "" {
+			conflicts = append(conflicts, "--cookie-store-path")
+		}
+		if len(conflicts) > 0 {
+			return nil, fmt.Errorf(
+				"--cookies-file cannot be combined with %s",
+				strings.Join(conflicts, ", "),
+			)
+		}
+
+		return []Source{{
+			Browser:     BrowserInline,
+			CookiesFile: cookiesFile,
+		}}, nil
+	}
+
 	if hasCLIOverride(in) {
 		profile := strings.TrimSpace(in.Profile)
 		path := strings.TrimSpace(in.CookieStorePath)

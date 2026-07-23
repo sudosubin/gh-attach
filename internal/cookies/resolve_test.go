@@ -154,3 +154,85 @@ func TestResolveSources_MissingBrowserInConfig(t *testing.T) {
 		t.Fatalf("error = %q, want to contain %q", err.Error(), "config.browsers[0].browser: required")
 	}
 }
+
+func TestResolveSources_CookiesFileIsSoleSource(t *testing.T) {
+	writeDefaultAttachConfig(t, `browsers:
+  - browser: firefox
+    profile: default-release
+`)
+
+	sources, err := ResolveSources(ResolveInput{
+		CookiesFile: "  /tmp/github-cookies.json  ",
+	})
+	if err != nil {
+		t.Fatalf("ResolveSources() error = %v", err)
+	}
+	if len(sources) != 1 {
+		t.Fatalf("len(sources) = %d, want 1", len(sources))
+	}
+	if sources[0].Browser != BrowserInline {
+		t.Fatalf("Browser = %q, want %q", sources[0].Browser, BrowserInline)
+	}
+	if sources[0].CookiesFile != "/tmp/github-cookies.json" {
+		t.Fatalf("CookiesFile = %q", sources[0].CookiesFile)
+	}
+	if sources[0].Profile != "" || sources[0].CookieStorePath != "" {
+		t.Fatalf("unexpected browser selectors: %#v", sources[0])
+	}
+}
+
+func TestResolveSources_RejectsBlankCookiesFile(t *testing.T) {
+	_, err := ResolveSources(ResolveInput{CookiesFile: "   "})
+	if err == nil {
+		t.Fatalf("ResolveSources() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "--cookies-file cannot be empty") {
+		t.Fatalf("error = %q", err.Error())
+	}
+}
+
+func TestResolveSources_RejectsCookiesFileConflicts(t *testing.T) {
+	cases := []struct {
+		name string
+		in   ResolveInput
+		flag string
+	}{
+		{
+			name: "browser",
+			in: ResolveInput{
+				CookiesFile: "/tmp/github-cookies.json",
+				Browser:     "edge",
+			},
+			flag: "--browser",
+		},
+		{
+			name: "profile",
+			in: ResolveInput{
+				CookiesFile: "/tmp/github-cookies.json",
+				Profile:     "Profile 2",
+			},
+			flag: "--profile",
+		},
+		{
+			name: "cookie store",
+			in: ResolveInput{
+				CookiesFile:     "/tmp/github-cookies.json",
+				CookieStorePath: "/tmp/Cookies",
+			},
+			flag: "--cookie-store-path",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ResolveSources(tc.in)
+			if err == nil {
+				t.Fatalf("ResolveSources() error = nil, want non-nil")
+			}
+			if !strings.Contains(err.Error(), "--cookies-file cannot be combined with") ||
+				!strings.Contains(err.Error(), tc.flag) {
+				t.Fatalf("error = %q, want conflict with %s", err.Error(), tc.flag)
+			}
+		})
+	}
+}

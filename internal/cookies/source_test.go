@@ -1,6 +1,9 @@
 package cookies
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestExpandSource_Auto(t *testing.T) {
 	t.Parallel()
@@ -186,5 +189,30 @@ func TestProfileSelectorRoundTrip(t *testing.T) {
 				t.Fatalf("round-trip %q -> %q", in, got)
 			}
 		})
+	}
+}
+
+func TestBrowserInlineIsInternalOnly(t *testing.T) {
+	t.Parallel()
+
+	for _, browser := range ConcreteBrowsers() {
+		if browser == BrowserInline {
+			t.Fatalf("BrowserInline must not be a concrete browser choice")
+		}
+	}
+	if strings.Contains(BrowserChoices(), string(BrowserInline)) {
+		t.Fatalf("BrowserChoices() unexpectedly contains %q", BrowserInline)
+	}
+	if _, err := ParseBrowser(string(BrowserInline)); err == nil {
+		t.Fatalf("ParseBrowser(%q) error = nil, want non-nil", BrowserInline)
+	}
+
+	source := Source{
+		Browser:     BrowserInline,
+		CookiesFile: "/tmp/github-cookies.json",
+	}
+	expanded := ExpandSource(source)
+	if len(expanded) != 1 || expanded[0] != source {
+		t.Fatalf("ExpandSource() = %#v, want %#v", expanded, []Source{source})
 	}
 }

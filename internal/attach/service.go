@@ -20,6 +20,7 @@ type Request struct {
 	Browser         string
 	Profile         string
 	CookieStorePath string
+	CookiesFile     string
 	Verbose         bool
 }
 
@@ -55,6 +56,7 @@ func (s *Service) Run(ctx context.Context, req Request) (upload.Asset, error) {
 		Browser:         req.Browser,
 		Profile:         req.Profile,
 		CookieStorePath: req.CookieStorePath,
+		CookiesFile:     req.CookiesFile,
 	})
 	if err != nil {
 		return upload.Asset{}, err
