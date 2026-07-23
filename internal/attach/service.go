@@ -38,6 +38,16 @@ func NewService(stderr io.Writer) *Service {
 }
 
 func (s *Service) Run(ctx context.Context, req Request) (upload.Asset, error) {
+	sources, err := cookies.ResolveSources(cookies.ResolveInput{
+		Browser:         req.Browser,
+		Profile:         req.Profile,
+		CookieStorePath: req.CookieStorePath,
+		CookiesFile:     req.CookiesFile,
+	})
+	if err != nil {
+		return upload.Asset{}, err
+	}
+
 	if _, err := os.Stat(req.FilePath); err != nil {
 		return upload.Asset{}, fmt.Errorf("file: %w", err)
 	}
@@ -50,16 +60,6 @@ func (s *Service) Run(ctx context.Context, req Request) (upload.Asset, error) {
 	ghService, err := ghapi.NewService(repoSpec.Host, nil)
 	if err != nil {
 		return upload.Asset{}, fmt.Errorf("init gh api service: %w", err)
-	}
-
-	sources, err := cookies.ResolveSources(cookies.ResolveInput{
-		Browser:         req.Browser,
-		Profile:         req.Profile,
-		CookieStorePath: req.CookieStorePath,
-		CookiesFile:     req.CookiesFile,
-	})
-	if err != nil {
-		return upload.Asset{}, err
 	}
 
 	var repo ghapi.Repository

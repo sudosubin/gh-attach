@@ -3,6 +3,7 @@ package attach
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -135,6 +136,69 @@ func TestCookieResolver_RedactsMismatchedInlineDotcomUser(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), mismatchedLogin) {
 		t.Fatalf("verbose stderr leaked mismatched dotcom_user: %s", stderr.String())
+	}
+}
+
+func TestCookieResolver_InlineProviderErrorIsDirect(t *testing.T) {
+	t.Parallel()
+
+	source := cookies.Source{
+		Browser:     cookies.BrowserInline,
+		CookiesFile: "/tmp/github-cookies.json",
+	}
+	providers := map[cookies.Browser]browserprovider.BrowserProvider{
+		cookies.BrowserInline: stubProvider{
+			backend: "sweetcookie",
+			err:     errors.New("read --cookies-file: permission denied"),
+		},
+	}
+
+	_, err := NewCookieResolver(providers, false, nil).Resolve(
+		t.Context(),
+		"github.com",
+		"octocat",
+		[]cookies.Source{source},
+	)
+	if err == nil {
+		t.Fatalf("Resolve() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "load --cookies-file") ||
+		!strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("error = %q", err.Error())
+	}
+}
+
+func TestCookieResolver_InlineMissingDotcomUserIsDirect(t *testing.T) {
+	t.Parallel()
+
+	source := cookies.Source{
+		Browser:     cookies.BrowserInline,
+		CookiesFile: "/tmp/github-cookies.json",
+	}
+	providers := map[cookies.Browser]browserprovider.BrowserProvider{
+		cookies.BrowserInline: stubProvider{
+			backend: "sweetcookie",
+			sessions: []browserprovider.BrowserSession{{
+				Browser: cookies.BrowserInline,
+				Cookies: []*http.Cookie{{
+					Name:  "user_session",
+					Value: "session-secret",
+				}},
+			}},
+		},
+	}
+
+	_, err := NewCookieResolver(providers, false, nil).Resolve(
+		t.Context(),
+		"github.com",
+		"octocat",
+		[]cookies.Source{source},
+	)
+	if err == nil || !strings.Contains(err.Error(), "contains no dotcom_user") {
+		t.Fatalf("error = %v", err)
+	}
+	if strings.Contains(err.Error(), "session-secret") {
+		t.Fatalf("error leaked cookie value: %q", err.Error())
 	}
 }
 
