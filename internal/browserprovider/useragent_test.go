@@ -1,117 +1,28 @@
 package browserprovider
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
 
-func TestFormatChromiumUA(t *testing.T) {
+func TestUserAgent_ReadsInstalledVersion(t *testing.T) {
 	t.Parallel()
 
 	// given
-	cases := []struct {
-		name    string
-		browser cookies.Browser
-		goos    string
-		major   string
-		want    string
-	}{
-		{
-			"chrome linux", cookies.BrowserChrome, "linux", "150",
-			"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-		},
-		{
-			"chrome macos", cookies.BrowserChrome, "darwin", "150",
-			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-		},
-		{
-			"chrome windows", cookies.BrowserChrome, "windows", "150",
-			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-		},
-		{
-			"edge appends Edg token", cookies.BrowserEdge, "windows", "150",
-			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0",
-		},
-		{
-			"brave has no fork token", cookies.BrowserBrave, "linux", "150",
-			"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-		},
-		{
-			"empty major falls back", cookies.BrowserChrome, "linux", "",
-			"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+	udd := t.TempDir()
+	store := filepath.Join(udd, "Default", "Cookies")
+	writeFile(t, store, "")
+	writeFile(t, filepath.Join(udd, "Last Version"), "151.0.1.2")
 
-			// when
-			got := (chromiumFamily{browser: tc.browser}).userAgent(tc.goos, tc.major)
-
-			// then
-			if got != tc.want {
-				t.Fatalf("\n got: %s\nwant: %s", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestFormatFirefoxUA(t *testing.T) {
-	t.Parallel()
-
-	// given
-	cases := []struct {
-		name        string
-		goos, major string
-		want        string
-	}{
-		{
-			"linux", "linux", "152",
-			"Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0",
-		},
-		{
-			"macos uses capped 10.15", "darwin", "152",
-			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:152.0) Gecko/20100101 Firefox/152.0",
-		},
-		{
-			"empty major falls back", "windows", "",
-			"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0",
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			// when
-			got := (firefoxFamily{}).userAgent(tc.goos, tc.major)
-
-			// then
-			if got != tc.want {
-				t.Fatalf("\n got: %s\nwant: %s", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestFormatSafariUA(t *testing.T) {
-	t.Parallel()
-
-	// given
 	// when
-	got := (safariFamily{}).userAgent("", "26.5.2")
-	// then
-	if got != "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15" {
-		t.Fatalf("full version: %s", got)
-	}
+	got := UserAgent(cookies.BrowserChrome, "linux", store)
 
-	// given
-	// when
-	fallback := (safariFamily{}).userAgent("", "")
 	// then
-	if fallback != "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15" {
-		t.Fatalf("fallback: %s", fallback)
+	if !strings.Contains(got, "Chrome/151.0.0.0") {
+		t.Fatalf("UA did not use read version: %s", got)
 	}
 }
 

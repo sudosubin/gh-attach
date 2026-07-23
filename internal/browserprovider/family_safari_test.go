@@ -69,3 +69,23 @@ func TestSafariVersion_RealBundle(t *testing.T) {
 		t.Fatalf("UA %q missing Version/%s", ua, got)
 	}
 }
+
+func TestFormatSafariUA(t *testing.T) {
+	t.Parallel()
+
+	// given
+	// when
+	got := (safariFamily{}).userAgent("", "26.5.2")
+	// then
+	if got != "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15" {
+		t.Fatalf("full version: %s", got)
+	}
+
+	// given
+	// when
+	fallback := (safariFamily{}).userAgent("", "")
+	// then
+	if fallback != "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15" {
+		t.Fatalf("fallback: %s", fallback)
+	}
+}
