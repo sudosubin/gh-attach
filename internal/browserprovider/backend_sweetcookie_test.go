@@ -1,6 +1,7 @@
 package browserprovider
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -114,6 +115,14 @@ func TestSweetcookieBackendLoad_InlineFailures(t *testing.T) {
 			}
 			if strings.Contains(err.Error(), "inline-secret") {
 				t.Fatalf("error leaked cookie value: %q", err.Error())
+			}
+
+			var safe interface{ SafeMessage() string }
+			if !errors.As(err, &safe) {
+				t.Fatalf("Load() error = %T, want SafeMessage()", err)
+			}
+			if !strings.Contains(safe.SafeMessage(), tc.want) {
+				t.Fatalf("SafeMessage() = %q, want %q", safe.SafeMessage(), tc.want)
 			}
 		})
 	}

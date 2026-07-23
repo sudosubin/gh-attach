@@ -16,6 +16,18 @@ import (
 
 type sweetcookieBackend struct{}
 
+type inlineSafeError struct {
+	message string
+}
+
+func (e inlineSafeError) Error() string {
+	return e.message
+}
+
+func (e inlineSafeError) SafeMessage() string {
+	return e.message
+}
+
 func newSweetcookieBackend() *sweetcookieBackend {
 	return &sweetcookieBackend{}
 }
@@ -52,7 +64,7 @@ func (*sweetcookieBackend) loadInline(ctx context.Context, host string, source c
 		return nil, err
 	}
 	if len(result.Cookies) == 0 {
-		return nil, fmt.Errorf("no usable %s cookies found in --cookies-file", host)
+		return nil, inlineSafeError{message: fmt.Sprintf("no usable %s cookies found in --cookies-file", host)}
 	}
 
 	out := make([]*http.Cookie, 0, len(result.Cookies))
@@ -65,13 +77,19 @@ func (*sweetcookieBackend) loadInline(ctx context.Context, host string, source c
 func validateInlineCookieFile(path string) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("read --cookies-file: %w", err)
+		if os.IsNotExist(err) {
+			return inlineSafeError{message: "read --cookies-file: file does not exist"}
+		}
+		if os.IsPermission(err) {
+			return inlineSafeError{message: "read --cookies-file: permission denied"}
+		}
+		return inlineSafeError{message: "read --cookies-file: unable to read"}
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
-		return fmt.Errorf("--cookies-file is empty")
+		return inlineSafeError{message: "--cookies-file is empty"}
 	}
 	if !json.Valid(raw) {
-		return fmt.Errorf("--cookies-file contains invalid JSON")
+		return inlineSafeError{message: "--cookies-file contains invalid JSON"}
 	}
 	return nil
 }

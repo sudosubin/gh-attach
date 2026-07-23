@@ -2,6 +2,7 @@ package attach
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -58,11 +59,14 @@ func (r *CookieResolver) Resolve(ctx context.Context, host, ghLogin string, sour
 			backendName := provider.BackendName()
 			sessions, err := provider.Load(ctx, host, candidate)
 			if err != nil {
+				if inline {
+					message := inlineProviderErrorMessage(err)
+					r.logf("source[%d]: browser=%s profile=%q cookie_store_path=%q cookies_file=%q provider=%s error=%s\n",
+						sourceIndex, candidate.Browser, candidate.Profile, candidate.CookieStorePath, candidate.CookiesFile, backendName, message)
+					return ResolvedCookies{}, fmt.Errorf("load --cookies-file %q: %s", candidate.CookiesFile, message)
+				}
 				r.logf("source[%d]: browser=%s profile=%q cookie_store_path=%q cookies_file=%q provider=%s error=%v\n",
 					sourceIndex, candidate.Browser, candidate.Profile, candidate.CookieStorePath, candidate.CookiesFile, backendName, err)
-				if inline {
-					return ResolvedCookies{}, fmt.Errorf("load --cookies-file %q: %w", candidate.CookiesFile, err)
-				}
 				continue
 			}
 
@@ -112,6 +116,18 @@ func (r *CookieResolver) Resolve(ctx context.Context, host, ghLogin string, sour
 	}
 
 	return ResolvedCookies{}, fmt.Errorf("failed to resolve usable cookie source from %d attempt(s)", attempts)
+}
+
+type safeMessageError interface {
+	SafeMessage() string
+}
+
+func inlineProviderErrorMessage(err error) string {
+	var safeErr safeMessageError
+	if errors.As(err, &safeErr) && safeErr.SafeMessage() != "" {
+		return safeErr.SafeMessage()
+	}
+	return "cookie provider failed"
 }
 
 func (r *CookieResolver) logf(format string, args ...any) {

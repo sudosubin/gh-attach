@@ -142,6 +142,8 @@ func TestCookieResolver_RedactsMismatchedInlineDotcomUser(t *testing.T) {
 func TestCookieResolver_InlineProviderErrorIsDirect(t *testing.T) {
 	t.Parallel()
 
+	const providerSecret = "inline-provider-secret"
+	var stderr bytes.Buffer
 	source := cookies.Source{
 		Browser:     cookies.BrowserInline,
 		CookiesFile: "/tmp/github-cookies.json",
@@ -149,22 +151,38 @@ func TestCookieResolver_InlineProviderErrorIsDirect(t *testing.T) {
 	providers := map[cookies.Browser]browserprovider.BrowserProvider{
 		cookies.BrowserInline: stubProvider{
 			backend: "sweetcookie",
-			err:     errors.New("read --cookies-file: permission denied"),
+			err:     errors.New("provider failed with " + providerSecret),
+		},
+		cookies.BrowserChromium: stubProvider{
+			backend: "sweetcookie",
+			sessions: []browserprovider.BrowserSession{{
+				Browser: cookies.BrowserChromium,
+				Cookies: []*http.Cookie{{Name: "dotcom_user", Value: "octocat"}},
+			}},
 		},
 	}
 
-	_, err := NewCookieResolver(providers, false, nil).Resolve(
+	_, err := NewCookieResolver(providers, true, &stderr).Resolve(
 		t.Context(),
 		"github.com",
 		"octocat",
-		[]cookies.Source{source},
+		[]cookies.Source{source, {Browser: cookies.BrowserChromium}},
 	)
 	if err == nil {
 		t.Fatalf("Resolve() error = nil, want non-nil")
 	}
 	if !strings.Contains(err.Error(), "load --cookies-file") ||
-		!strings.Contains(err.Error(), "permission denied") {
+		!strings.Contains(err.Error(), "cookie provider failed") {
 		t.Fatalf("error = %q", err.Error())
+	}
+	if strings.Contains(err.Error(), providerSecret) {
+		t.Fatalf("Resolve() error leaked provider error: %q", err.Error())
+	}
+	if strings.Contains(stderr.String(), providerSecret) {
+		t.Fatalf("verbose stderr leaked provider error: %s", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "selected source") {
+		t.Fatalf("Resolve() selected a later browser source: %s", stderr.String())
 	}
 }
 
