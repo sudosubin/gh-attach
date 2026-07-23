@@ -193,10 +193,10 @@ func (u *Uploader) requestPolicies(ctx context.Context, refererURL string, field
 // uploadBinaryCloud PUTs to the S3 presigned URL; an empty/unparsable body isn't an error since finalizeAssetCloud fills in the asset.
 func (u *Uploader) uploadBinaryCloud(ctx context.Context, filePath string, contentType string, policies policiesResponse, refererURL string) (Asset, error) {
 	headers := make(map[string]string, len(policies.Header)+1)
-	maps.Copy(headers, policies.Header)
 	if contentType != "" {
 		headers["X-File-Content-Type"] = contentType
 	}
+	maps.Copy(headers, policies.Header)
 
 	body, err := u.client.DoMultipart(ctx, ghweb.Request{
 		Method:   http.MethodPost,
@@ -229,10 +229,10 @@ func (u *Uploader) uploadBinaryEnterprise(ctx context.Context, filePath string, 
 	}
 
 	headers := make(map[string]string, len(policies.Header)+1)
-	maps.Copy(headers, policies.Header)
 	if contentType != "" {
 		headers["X-File-Content-Type"] = contentType
 	}
+	maps.Copy(headers, policies.Header)
 
 	body, err := u.client.DoMultipart(ctx, ghweb.Request{
 		Method:   http.MethodPost,
