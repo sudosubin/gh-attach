@@ -3,7 +3,6 @@ package browserprovider
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/sudosubin/gh-attach/internal/cookies"
@@ -91,20 +90,53 @@ func TestChromiumMajorVersion_NoFilesReturnsEmpty(t *testing.T) {
 	}
 }
 
-func TestUserAgent_ReadsInstalledVersion(t *testing.T) {
+func TestFormatChromiumUA(t *testing.T) {
 	t.Parallel()
 
 	// given
-	udd := t.TempDir()
-	store := filepath.Join(udd, "Default", "Cookies")
-	writeFile(t, store, "")
-	writeFile(t, filepath.Join(udd, "Last Version"), "151.0.1.2")
+	cases := []struct {
+		name    string
+		browser cookies.Browser
+		goos    string
+		major   string
+		want    string
+	}{
+		{
+			"chrome linux", cookies.BrowserChrome, "linux", "150",
+			"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+		},
+		{
+			"chrome macos", cookies.BrowserChrome, "darwin", "150",
+			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+		},
+		{
+			"chrome windows", cookies.BrowserChrome, "windows", "150",
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+		},
+		{
+			"edge appends Edg token", cookies.BrowserEdge, "windows", "150",
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0",
+		},
+		{
+			"brave has no fork token", cookies.BrowserBrave, "linux", "150",
+			"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+		},
+		{
+			"empty major falls back", cookies.BrowserChrome, "linux", "",
+			"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	// when
-	got := UserAgent(cookies.BrowserChrome, "linux", store)
+			// when
+			got := (chromiumFamily{browser: tc.browser}).userAgent(tc.goos, tc.major)
 
-	// then
-	if !strings.Contains(got, "Chrome/151.0.0.0") {
-		t.Fatalf("UA did not use read version: %s", got)
+			// then
+			if got != tc.want {
+				t.Fatalf("\n got: %s\nwant: %s", got, tc.want)
+			}
+		})
 	}
 }
