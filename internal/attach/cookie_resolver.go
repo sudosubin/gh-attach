@@ -68,8 +68,8 @@ func (r *CookieResolver) Resolve(ctx context.Context, host, ghLogin string, sour
 				}
 
 				if !containsFold(dotcomUsers, ghLogin) {
-					r.logf("source[%d]: browser=%s provider=%s profile=%q skipped (dotcom_user=%q != gh_login=%q)\n",
-						idx, candidate.Browser, backendName, session.Profile, strings.Join(dotcomUsers, ","), ghLogin)
+					r.logf("source[%d]: browser=%s provider=%s profile=%q skipped (dotcom_user mismatch)\n",
+						idx, candidate.Browser, backendName, session.Profile)
 					continue
 				}
 

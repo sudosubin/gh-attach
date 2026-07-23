@@ -1,8 +1,10 @@
 package attach
 
 import (
+	"bytes"
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
@@ -104,6 +106,35 @@ func TestCookieResolver_SkipsOnLoginMismatch(t *testing.T) {
 	_, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
 	if err == nil {
 		t.Fatalf("Resolve() error = nil, want non-nil")
+	}
+}
+
+func TestCookieResolver_RedactsMismatchedInlineDotcomUser(t *testing.T) {
+	t.Parallel()
+
+	const mismatchedLogin = "synthetic-inline-mismatch"
+	var stderr bytes.Buffer
+	sources := []cookies.Source{{Browser: cookies.BrowserInline, CookiesFile: "cookies.json"}}
+	providers := map[cookies.Browser]browserprovider.BrowserProvider{
+		cookies.BrowserInline: stubProvider{
+			backend: "sweetcookie",
+			sessions: []browserprovider.BrowserSession{{
+				Browser: cookies.BrowserInline,
+				Cookies: []*http.Cookie{{Name: "dotcom_user", Value: mismatchedLogin}},
+			}},
+		},
+	}
+
+	resolver := NewCookieResolver(providers, true, &stderr)
+	_, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
+	if err == nil {
+		t.Fatal("Resolve() error = nil, want non-nil")
+	}
+	if strings.Contains(err.Error(), mismatchedLogin) {
+		t.Fatalf("Resolve() error leaked mismatched dotcom_user: %v", err)
+	}
+	if strings.Contains(stderr.String(), mismatchedLogin) {
+		t.Fatalf("verbose stderr leaked mismatched dotcom_user: %s", stderr.String())
 	}
 }
 
