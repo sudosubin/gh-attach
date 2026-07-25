@@ -85,14 +85,9 @@ func (s *Service) Run(ctx context.Context, req Request) (attachments.Asset, erro
 		return attachments.Asset{}, err
 	}
 
-	// The page-parsed repository_id avoids an extra request; fall back to the API if absent.
-	repositoryID := refererPage.Meta.RepositoryID
-	if repositoryID <= 0 {
-		resolvedRepo, err := ghService.ResolveRepository(repo.Owner, repo.Name)
-		if err != nil {
-			return attachments.Asset{}, fmt.Errorf("resolve repository: %w", err)
-		}
-		repositoryID = resolvedRepo.ID
+	repositoryID, err := NewPageRepositoryIDResolver(ghService).RepositoryID(refererPage, repo.Owner, repo.Name)
+	if err != nil {
+		return attachments.Asset{}, fmt.Errorf("resolve repository: %w", err)
 	}
 
 	return uploader.Upload(ctx, req.FilePath, refererPage, repositoryID)
