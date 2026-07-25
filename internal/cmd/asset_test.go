@@ -1,4 +1,4 @@
-package formatting
+package cmd
 
 import (
 	"bytes"
@@ -12,8 +12,8 @@ func TestWriteAsset_DefaultOutputIsHref(t *testing.T) {
 	asset := attachments.Asset{Href: "https://github.com/user-attachments/assets/abc"}
 
 	var out bytes.Buffer
-	if err := WriteAsset(&out, asset, Options{}); err != nil {
-		t.Fatalf("WriteAsset() error = %v", err)
+	if err := writeAsset(&out, asset, options{}); err != nil {
+		t.Fatalf("writeAsset() error = %v", err)
 	}
 
 	want := asset.Href + "\n"
@@ -31,8 +31,8 @@ func TestWriteAsset_JSONOutput(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := WriteAsset(&out, asset, Options{JSONFlagSet: true, JSONFields: []string{"href", "name"}}); err != nil {
-		t.Fatalf("WriteAsset() error = %v", err)
+	if err := writeAsset(&out, asset, options{JSONFlagSet: true, JSONFields: []string{"href", "name"}}); err != nil {
+		t.Fatalf("writeAsset() error = %v", err)
 	}
 
 	var got map[string]any

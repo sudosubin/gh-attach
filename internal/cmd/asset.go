@@ -1,4 +1,4 @@
-package formatting
+package cmd
 
 import (
 	"bytes"
@@ -22,14 +22,14 @@ var availableAssetFields = []string{
 	"originalName",
 }
 
-type Options struct {
+type options struct {
 	JSONFlagSet bool
 	JSONFields  []string
 	JQ          string
 	Template    string
 }
 
-func WriteAsset(w io.Writer, asset attachments.Asset, opts Options) error {
+func writeAsset(w io.Writer, asset attachments.Asset, opts options) error {
 	if !opts.JSONFlagSet {
 		_, err := fmt.Fprintln(w, asset.Href)
 		return err
@@ -86,7 +86,7 @@ func WriteAsset(w io.Writer, asset attachments.Asset, opts Options) error {
 	return err
 }
 
-func AvailableJSONFields() []string {
+func availableJSONFields() []string {
 	out := make([]string, len(availableAssetFields))
 	copy(out, availableAssetFields)
 	return out

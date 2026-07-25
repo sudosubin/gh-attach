@@ -6,9 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/sudosubin/gh-attach/internal/app"
-	"github.com/sudosubin/gh-attach/internal/cmdutil"
 	"github.com/sudosubin/gh-attach/internal/cookies"
-	"github.com/sudosubin/gh-attach/internal/formatting"
 )
 
 type AttachOptions struct {
@@ -17,7 +15,7 @@ type AttachOptions struct {
 	Browser         string
 	Profile         string
 	CookieStorePath string
-	JSON            cmdutil.JSONFlags
+	JSON            jsonFlags
 	Verbose         bool
 }
 
@@ -47,7 +45,7 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
 	cmd.Flags().StringVar(&opts.CookieStorePath, "cookie-store-path", "", "Cookie store file path")
 	cmd.Flags().BoolVarP(&opts.Verbose, "verbose", "v", false, "Verbose output")
 
-	cmdutil.AddJSONFlags(cmd, &opts.JSON, formatting.AvailableJSONFields())
+	addJSONFlags(cmd, &opts.JSON, availableJSONFields())
 
 	return cmd
 }
@@ -68,7 +66,7 @@ func attachRun(opts *AttachOptions) error {
 		return err
 	}
 
-	return formatting.WriteAsset(os.Stdout, asset, formatting.Options{
+	return writeAsset(os.Stdout, asset, options{
 		JSONFlagSet: opts.JSON.Enabled,
 		JSONFields:  opts.JSON.Fields,
 		JQ:          opts.JSON.Filter,

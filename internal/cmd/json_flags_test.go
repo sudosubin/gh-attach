@@ -1,4 +1,4 @@
-package cmdutil
+package cmd
 
 import (
 	"io"
@@ -11,9 +11,9 @@ import (
 func TestAddJSONFlags_Valid(t *testing.T) {
 	t.Parallel()
 
-	var parsed JSONFlags
+	var parsed jsonFlags
 	cmd := &cobra.Command{RunE: func(*cobra.Command, []string) error { return nil }}
-	AddJSONFlags(cmd, &parsed, []string{"id", "href", "name"})
+	addJSONFlags(cmd, &parsed, []string{"id", "href", "name"})
 	cmd.SetArgs([]string{"--json", "id,href", "--jq", ".href"})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
@@ -47,9 +47,9 @@ func TestAddJSONFlags_Errors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var parsed JSONFlags
+			var parsed jsonFlags
 			cmd := &cobra.Command{RunE: func(*cobra.Command, []string) error { return nil }}
-			AddJSONFlags(cmd, &parsed, []string{"id", "href", "name"})
+			addJSONFlags(cmd, &parsed, []string{"id", "href", "name"})
 			cmd.SetArgs(tt.args)
 			cmd.SetOut(io.Discard)
 			cmd.SetErr(io.Discard)
