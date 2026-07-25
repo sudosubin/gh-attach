@@ -9,6 +9,14 @@ import (
 	"github.com/sudosubin/gh-attach/internal/github/web"
 )
 
+func newTestUploader(server *httptest.Server, enterprise bool) *Uploader {
+	return &Uploader{
+		baseURL:      server.URL,
+		client:       web.NewClient(server.Client(), "", nil),
+		isEnterprise: enterprise,
+	}
+}
+
 func TestRequestPolicies_InjectsRefererAndUploadHeaders(t *testing.T) {
 	const expectedReferer = "https://github.com/owner/repo/commit/abc123"
 	const expectedFetchNonce = "nonce-123"
@@ -35,11 +43,7 @@ func TestRequestPolicies_InjectsRefererAndUploadHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	u := &Uploader{
-		baseURL:      server.URL,
-		client:       web.NewClient(server.Client(), "", nil),
-		isEnterprise: false,
-	}
+	u := newTestUploader(server, false)
 	refererPage := &RefererPage{
 		URL:  expectedReferer,
 		Meta: refererPageMetadata{FetchNonce: "nonce-123", GitHubClientVersion: "1.2.3"},
@@ -78,11 +82,7 @@ func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.
 	}))
 	defer server.Close()
 
-	u := &Uploader{
-		baseURL:      server.URL,
-		client:       web.NewClient(server.Client(), "", nil),
-		isEnterprise: false,
-	}
+	u := newTestUploader(server, false)
 	refererPage := &RefererPage{
 		URL:  "https://github.com/owner/repo/issues/new",
 		Meta: refererPageMetadata{},
@@ -115,11 +115,7 @@ func TestRequestPoliciesCloud_IgnoresAuthenticityTokenOnPage(t *testing.T) {
 	}))
 	defer server.Close()
 
-	u := &Uploader{
-		baseURL:      server.URL,
-		client:       web.NewClient(server.Client(), "", nil),
-		isEnterprise: false,
-	}
+	u := newTestUploader(server, false)
 	refererPage := &RefererPage{
 		URL: "https://github.com/owner/repo/issues/new",
 		// An unrelated authenticity_token on the page must not be sent on the cloud path.
@@ -155,11 +151,7 @@ func TestRequestPoliciesEnterprise_SendsAuthTokenAndVerifiedFetch(t *testing.T) 
 	}))
 	defer server.Close()
 
-	u := &Uploader{
-		baseURL:      server.URL,
-		client:       web.NewClient(server.Client(), "", nil),
-		isEnterprise: true,
-	}
+	u := newTestUploader(server, true)
 	refererPage := &RefererPage{
 		URL: "https://github.enterprise.test/owner/repo/issues/new",
 		// Even a stray fetch-nonce meta must not be sent on the enterprise path.
@@ -188,11 +180,7 @@ func TestRequestPoliciesEnterprise_FailsFastWhenAuthTokenMissing(t *testing.T) {
 	}))
 	defer server.Close()
 
-	u := &Uploader{
-		baseURL:      server.URL,
-		client:       web.NewClient(server.Client(), "", nil),
-		isEnterprise: true,
-	}
+	u := newTestUploader(server, true)
 	refererPage := &RefererPage{
 		URL:  "https://github.enterprise.test/owner/repo/issues/new",
 		Meta: refererPageMetadata{},
@@ -224,11 +212,7 @@ func TestUploadEnterpriseFlow_SkipsFinalize(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":1,"href":"https://github.enterprise.test/user-attachments/assets/abc"}`))
 	})
 
-	u := &Uploader{
-		baseURL:      server.URL,
-		client:       web.NewClient(server.Client(), "", nil),
-		isEnterprise: true,
-	}
+	u := newTestUploader(server, true)
 
 	refererPage := &RefererPage{
 		URL:  server.URL + "/owner/repo/issues/new",
@@ -271,11 +255,7 @@ func TestUploadEnterpriseFlow_MediaHostGetsGHESOriginNotItsOwn(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":1,"href":"https://github.enterprise.test/user-attachments/assets/abc"}`))
 	})
 
-	u := &Uploader{
-		baseURL:      ghesServer.URL,
-		client:       web.NewClient(ghesServer.Client(), "", nil),
-		isEnterprise: true,
-	}
+	u := newTestUploader(ghesServer, true)
 
 	refererPage := &RefererPage{
 		URL:  ghesServer.URL + "/owner/repo/issues/new",
@@ -333,11 +313,7 @@ func TestUploadCloudFlow_UsesRefererPageURLConsistently(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":1,"href":"https://github.test/user-attachments/assets/final"}`))
 	})
 
-	u := &Uploader{
-		baseURL:      server.URL,
-		client:       web.NewClient(server.Client(), "", nil),
-		isEnterprise: false,
-	}
+	u := newTestUploader(server, false)
 
 	refererPage := &RefererPage{
 		URL:  server.URL + "/" + refererURL,
