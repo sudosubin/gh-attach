@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/sudosubin/gh-attach/internal/upload"
+	"github.com/sudosubin/gh-attach/internal/github/attachments"
 )
 
 func TestWriteAsset_DefaultOutputIsHref(t *testing.T) {
-	asset := upload.Asset{Href: "https://github.com/user-attachments/assets/abc"}
+	asset := attachments.Asset{Href: "https://github.com/user-attachments/assets/abc"}
 
 	var out bytes.Buffer
 	if err := WriteAsset(&out, asset, Options{}); err != nil {
@@ -23,7 +23,7 @@ func TestWriteAsset_DefaultOutputIsHref(t *testing.T) {
 }
 
 func TestWriteAsset_JSONOutput(t *testing.T) {
-	asset := upload.Asset{
+	asset := attachments.Asset{
 		ID:          1,
 		Name:        "image.png",
 		ContentType: "image/png",

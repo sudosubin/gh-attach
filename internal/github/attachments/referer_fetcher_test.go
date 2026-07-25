@@ -1,4 +1,4 @@
-package upload
+package attachments
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
 	"github.com/sudosubin/gh-attach/internal/cookies"
-	"github.com/sudosubin/gh-attach/internal/ghweb"
+	"github.com/sudosubin/gh-attach/internal/github/web"
 )
 
 type stubLatestCommitResolver struct {
@@ -32,7 +32,7 @@ func TestIssueNewPageFetcher_ReturnsNilOnStatusCodeError(t *testing.T) {
 
 	host := mustHost(t, server.URL)
 	fetcher := NewIssueNewPageFetcher(host, "owner/repo")
-	page, err := fetcher.Fetch(t.Context(), ghweb.NewClient(server.Client(), "", nil))
+	page, err := fetcher.Fetch(t.Context(), web.NewClient(server.Client(), "", nil))
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
 	}
@@ -48,7 +48,7 @@ func TestResolveRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		case "/owner/repo/commit/abc123":
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`<meta name="csrf-token" content="commit-token">`))
+			_, _ = w.Write([]byte(`<meta name="csrf-token" content="commit-token"><meta name="octolytics-dimension-repository_id" content="777">`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -56,7 +56,7 @@ func TestResolveRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 	defer server.Close()
 
 	host := mustHost(t, server.URL)
-	uploader, err := NewUploader(host, 1, browserprovider.BrowserSession{Browser: cookies.BrowserChromium, UserAgent: "test-agent"}, server.Client())
+	uploader, err := NewUploader(host, browserprovider.BrowserSession{Browser: cookies.BrowserChromium, UserAgent: "test-agent"}, server.Client())
 	if err != nil {
 		t.Fatalf("NewUploader() error = %v", err)
 	}
@@ -74,8 +74,12 @@ func TestResolveRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 	if refererPage.URL != "https://"+host+"/owner/repo/commit/abc123" {
 		t.Fatalf("refererPage.URL = %q", refererPage.URL)
 	}
-	if string(refererPage.Body) != `<meta name="csrf-token" content="commit-token">` {
-		t.Fatalf("refererPage.Body = %q", string(refererPage.Body))
+	// Parsed at fetch time: CSRF via the shared parser, repository_id via the octolytics pattern.
+	if refererPage.Meta.AuthenticityToken != "commit-token" {
+		t.Fatalf("refererPage.Meta.AuthenticityToken = %q, want %q", refererPage.Meta.AuthenticityToken, "commit-token")
+	}
+	if refererPage.Meta.RepositoryID != 777 {
+		t.Fatalf("refererPage.Meta.RepositoryID = %d, want %d", refererPage.Meta.RepositoryID, 777)
 	}
 }
 
@@ -85,16 +89,16 @@ type stubRefererPageFetcher struct {
 	err   error
 }
 
-func (f *stubRefererPageFetcher) Fetch(_ context.Context, _ *ghweb.Client) (*RefererPage, error) {
+func (f *stubRefererPageFetcher) Fetch(_ context.Context, _ *web.Client) (*RefererPage, error) {
 	f.calls++
 	return f.page, f.err
 }
 
 func TestResolveRefererPage_EarlyReturnsOnFirstSuccess(t *testing.T) {
-	first := &stubRefererPageFetcher{page: &RefererPage{URL: "https://github.com/owner/repo/issues/new", Body: []byte("ok")}}
-	second := &stubRefererPageFetcher{page: &RefererPage{URL: "https://github.com/owner/repo/commit/abc123", Body: []byte("ok")}}
+	first := &stubRefererPageFetcher{page: &RefererPage{URL: "https://github.com/owner/repo/issues/new"}}
+	second := &stubRefererPageFetcher{page: &RefererPage{URL: "https://github.com/owner/repo/commit/abc123"}}
 
-	uploader, err := NewUploader("github.com", 1, browserprovider.BrowserSession{Browser: cookies.BrowserChromium, UserAgent: "test-agent"}, nil)
+	uploader, err := NewUploader("github.com", browserprovider.BrowserSession{Browser: cookies.BrowserChromium, UserAgent: "test-agent"}, nil)
 	if err != nil {
 		t.Fatalf("NewUploader() error = %v", err)
 	}
@@ -134,14 +138,14 @@ func mustOrigin(t *testing.T, rawURL string) string {
 	return u.Scheme + "://" + u.Host
 }
 
-func TestExtractRefererPageMetadata(t *testing.T) {
+func TestParseCSRFMetadata(t *testing.T) {
 	html := `
 		<meta name="csrf-token" content="csrf-1">
 		<meta name="fetch-nonce" content="nonce-1">
 		<meta name="release" content="release-1">
 	`
 
-	meta := extractRefererPageMetadata(html)
+	meta := parseCSRFMetadata(html)
 	if meta.AuthenticityToken != "csrf-1" {
 		t.Fatalf("AuthenticityToken = %q, want %q", meta.AuthenticityToken, "csrf-1")
 	}
@@ -150,5 +154,52 @@ func TestExtractRefererPageMetadata(t *testing.T) {
 	}
 	if meta.GitHubClientVersion != "release-1" {
 		t.Fatalf("GitHubClientVersion = %q, want %q", meta.GitHubClientVersion, "release-1")
+	}
+}
+
+func TestExtractRepositoryID(t *testing.T) {
+	tests := []struct {
+		name string
+		html string
+		want int64
+	}{
+		{
+			name: "react databaseId (issues/new on github.com)",
+			html: `<script>{"repository":{"id":"R_kgABC","databaseId":261246700,"name":"nixos-config"}}</script>`,
+			want: 261246700,
+		},
+		{
+			name: "octolytics meta (commit on github.com)",
+			html: `<meta name="octolytics-dimension-repository_id" content="261246700">`,
+			want: 261246700,
+		},
+		{
+			name: "deferred-side-panel data-url (issues/new on GHES)",
+			html: `<deferred-side-panel data-url="/_side-panels/user?repository_id=416">`,
+			want: 416,
+		},
+		{
+			name: "databaseId takes priority over octolytics when both present",
+			html: `<script>{"repository":{"id":"R_kgABC","databaseId":100}}</script><meta name="octolytics-dimension-repository_id" content="200">`,
+			want: 100,
+		},
+		{
+			name: "octolytics takes priority over data-url when both present",
+			html: `<meta name="octolytics-dimension-repository_id" content="100"><deferred-side-panel data-url="/x?repository_id=200">`,
+			want: 100,
+		},
+		{
+			name: "no repository id present",
+			html: `<html><head><title>nothing here</title></head></html>`,
+			want: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := extractRepositoryID(tt.html); got != tt.want {
+				t.Fatalf("extractRepositoryID() = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }

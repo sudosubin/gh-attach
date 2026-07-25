@@ -1,5 +1,5 @@
-// Package ghweb builds and sends authenticated HTTP requests to a GitHub web host; it knows nothing about upload API shapes — see internal/upload for that.
-package ghweb
+// Package web builds and sends authenticated HTTP requests to a GitHub web host; it knows nothing about upload API shapes — see internal/github/attachments for that.
+package web
 
 import (
 	"bytes"

@@ -1,4 +1,4 @@
-package upload
+package attachments
 
 import (
 	"context"
@@ -15,26 +15,20 @@ import (
 
 	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
-	"github.com/sudosubin/gh-attach/internal/ghweb"
+	"github.com/sudosubin/gh-attach/internal/github/web"
 )
 
 // Uploader carries the shared session context for GitHub user-attachment uploads.
 type Uploader struct {
 	baseURL      string // e.g. "https://github.com"
-	repositoryID int64
-	client       *ghweb.Client
+	client       *web.Client
 	isEnterprise bool
 }
 
-func NewUploader(host string, repositoryID int64, session browserprovider.BrowserSession, client *http.Client) (*Uploader, error) {
-	if repositoryID <= 0 {
-		return nil, fmt.Errorf("invalid repository id")
-	}
-
+func NewUploader(host string, session browserprovider.BrowserSession, client *http.Client) (*Uploader, error) {
 	return &Uploader{
 		baseURL:      "https://" + host,
-		repositoryID: repositoryID,
-		client:       ghweb.NewClient(client, session.UserAgent, session.Cookies),
+		client:       web.NewClient(client, session.UserAgent, session.Cookies),
 		isEnterprise: auth.IsEnterprise(host),
 	}, nil
 }
@@ -62,7 +56,7 @@ func (u *Uploader) ResolveRefererPage(ctx context.Context, fetchers []RefererPag
 	return nil, fmt.Errorf("failed to resolve accessible referer page")
 }
 
-func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *RefererPage) (Asset, error) {
+func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *RefererPage, repositoryID int64) (Asset, error) {
 	if refererPage == nil || strings.TrimSpace(refererPage.URL) == "" {
 		return Asset{}, fmt.Errorf("invalid referer page")
 	}
@@ -82,14 +76,14 @@ func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *Ref
 	}
 
 	if u.isEnterprise {
-		return u.uploadEnterpriseFlow(ctx, filePath, refererPage, fileName, fileInfo.Size(), contentType)
+		return u.uploadEnterpriseFlow(ctx, filePath, refererPage, repositoryID, fileName, fileInfo.Size(), contentType)
 	}
-	return u.uploadCloudFlow(ctx, filePath, refererPage, fileName, fileInfo.Size(), contentType)
+	return u.uploadCloudFlow(ctx, filePath, refererPage, repositoryID, fileName, fileInfo.Size(), contentType)
 }
 
 // uploadCloudFlow is github.com's 3-step upload: policies -> S3 -> finalize.
-func (u *Uploader) uploadCloudFlow(ctx context.Context, filePath string, refererPage *RefererPage, fileName string, fileSize int64, contentType string) (Asset, error) {
-	policies, err := u.requestPoliciesCloud(ctx, refererPage, fileName, fileSize, contentType)
+func (u *Uploader) uploadCloudFlow(ctx context.Context, filePath string, refererPage *RefererPage, repositoryID int64, fileName string, fileSize int64, contentType string) (Asset, error) {
+	policies, err := u.requestPoliciesCloud(ctx, refererPage, repositoryID, fileName, fileSize, contentType)
 	if err != nil {
 		return Asset{}, err
 	}
@@ -118,8 +112,8 @@ func (u *Uploader) uploadCloudFlow(ctx context.Context, filePath string, referer
 }
 
 // uploadEnterpriseFlow is GHES's 2-step upload: policies -> media host (no finalize step).
-func (u *Uploader) uploadEnterpriseFlow(ctx context.Context, filePath string, refererPage *RefererPage, fileName string, fileSize int64, contentType string) (Asset, error) {
-	policies, err := u.requestPoliciesEnterprise(ctx, refererPage, fileName, fileSize, contentType)
+func (u *Uploader) uploadEnterpriseFlow(ctx context.Context, filePath string, refererPage *RefererPage, repositoryID int64, fileName string, fileSize int64, contentType string) (Asset, error) {
+	policies, err := u.requestPoliciesEnterprise(ctx, refererPage, repositoryID, fileName, fileSize, contentType)
 	if err != nil {
 		return Asset{}, err
 	}
@@ -127,8 +121,8 @@ func (u *Uploader) uploadEnterpriseFlow(ctx context.Context, filePath string, re
 }
 
 // requestPoliciesCloud authenticates via X-Fetch-Nonce/X-GitHub-Client-Version, never authenticity_token.
-func (u *Uploader) requestPoliciesCloud(ctx context.Context, refererPage *RefererPage, fileName string, fileSize int64, contentType string) (policiesResponse, error) {
-	refererMeta := extractRefererPageMetadata(string(refererPage.Body))
+func (u *Uploader) requestPoliciesCloud(ctx context.Context, refererPage *RefererPage, repositoryID int64, fileName string, fileSize int64, contentType string) (policiesResponse, error) {
+	refererMeta := refererPage.Meta
 
 	headers := map[string]string{}
 	if strings.TrimSpace(refererMeta.FetchNonce) != "" {
@@ -138,25 +132,25 @@ func (u *Uploader) requestPoliciesCloud(ctx context.Context, refererPage *Refere
 		headers["X-GitHub-Client-Version"] = refererMeta.GitHubClientVersion
 	}
 
-	return u.requestPolicies(ctx, refererPage.URL, u.policiesFields(fileName, fileSize, contentType), headers)
+	return u.requestPolicies(ctx, refererPage.URL, u.policiesFields(repositoryID, fileName, fileSize, contentType), headers)
 }
 
 // requestPoliciesEnterprise authenticates via authenticity_token and fails fast if it's missing from the referer page.
-func (u *Uploader) requestPoliciesEnterprise(ctx context.Context, refererPage *RefererPage, fileName string, fileSize int64, contentType string) (policiesResponse, error) {
-	refererMeta := extractRefererPageMetadata(string(refererPage.Body))
+func (u *Uploader) requestPoliciesEnterprise(ctx context.Context, refererPage *RefererPage, repositoryID int64, fileName string, fileSize int64, contentType string) (policiesResponse, error) {
+	refererMeta := refererPage.Meta
 	if refererMeta.AuthenticityToken == "" {
 		return policiesResponse{}, fmt.Errorf("enterprise host requires an authenticity_token, but none was found on the referer page")
 	}
 
-	fields := u.policiesFields(fileName, fileSize, contentType)
+	fields := u.policiesFields(repositoryID, fileName, fileSize, contentType)
 	fields["authenticity_token"] = refererMeta.AuthenticityToken
 
 	return u.requestPolicies(ctx, refererPage.URL, fields, map[string]string{})
 }
 
-func (u *Uploader) policiesFields(fileName string, fileSize int64, contentType string) map[string]string {
+func (u *Uploader) policiesFields(repositoryID int64, fileName string, fileSize int64, contentType string) map[string]string {
 	return map[string]string{
-		"repository_id": strconv.FormatInt(u.repositoryID, 10),
+		"repository_id": strconv.FormatInt(repositoryID, 10),
 		"name":          fileName,
 		"size":          strconv.FormatInt(fileSize, 10),
 		"content_type":  contentType,
@@ -169,7 +163,7 @@ func (u *Uploader) requestPolicies(ctx context.Context, refererURL string, field
 	headers["X-Requested-With"] = "XMLHttpRequest"
 	headers["GitHub-Verified-Fetch"] = "true"
 
-	body, err := u.client.DoMultipart(ctx, ghweb.Request{
+	body, err := u.client.DoMultipart(ctx, web.Request{
 		Method:  http.MethodPost,
 		URL:     u.baseURL + "/upload/policies/assets",
 		Fields:  fields,
@@ -198,7 +192,7 @@ func (u *Uploader) uploadBinaryCloud(ctx context.Context, filePath string, conte
 	}
 	maps.Copy(headers, policies.Header)
 
-	body, err := u.client.DoMultipart(ctx, ghweb.Request{
+	body, err := u.client.DoMultipart(ctx, web.Request{
 		Method:   http.MethodPost,
 		URL:      policies.UploadURL,
 		Fields:   policies.Form,
@@ -234,7 +228,7 @@ func (u *Uploader) uploadBinaryEnterprise(ctx context.Context, filePath string, 
 	}
 	maps.Copy(headers, policies.Header)
 
-	body, err := u.client.DoMultipart(ctx, ghweb.Request{
+	body, err := u.client.DoMultipart(ctx, web.Request{
 		Method:   http.MethodPost,
 		URL:      policies.UploadURL,
 		Fields:   fields,
@@ -268,7 +262,7 @@ func (u *Uploader) finalizeAssetCloud(ctx context.Context, policies policiesResp
 	}
 
 	// Same fetch-nonce pair as the policies request, from the same referer page.
-	refererMeta := extractRefererPageMetadata(string(refererPage.Body))
+	refererMeta := refererPage.Meta
 	headers := map[string]string{
 		"Accept":           "application/json",
 		"X-Requested-With": "XMLHttpRequest",
@@ -280,7 +274,7 @@ func (u *Uploader) finalizeAssetCloud(ctx context.Context, policies policiesResp
 		headers["X-GitHub-Client-Version"] = refererMeta.GitHubClientVersion
 	}
 
-	body, err := u.client.DoMultipart(ctx, ghweb.Request{
+	body, err := u.client.DoMultipart(ctx, web.Request{
 		Method:  http.MethodPut,
 		URL:     finalURL,
 		Fields:  map[string]string{"authenticity_token": policies.AssetUploadAuthenticityToken},

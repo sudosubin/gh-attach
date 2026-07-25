@@ -1,4 +1,4 @@
-package upload
+package attachments
 
 import (
 	"net/http"
@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sudosubin/gh-attach/internal/ghweb"
+	"github.com/sudosubin/gh-attach/internal/github/web"
 )
 
 func TestRequestPolicies_InjectsRefererAndUploadHeaders(t *testing.T) {
@@ -37,16 +37,15 @@ func TestRequestPolicies_InjectsRefererAndUploadHeaders(t *testing.T) {
 
 	u := &Uploader{
 		baseURL:      server.URL,
-		repositoryID: 1,
-		client:       ghweb.NewClient(server.Client(), "", nil),
+		client:       web.NewClient(server.Client(), "", nil),
 		isEnterprise: false,
 	}
 	refererPage := &RefererPage{
 		URL:  expectedReferer,
-		Body: []byte(`<meta name="fetch-nonce" content="nonce-123"><meta name="release" content="1.2.3">`),
+		Meta: refererPageMetadata{FetchNonce: "nonce-123", GitHubClientVersion: "1.2.3"},
 	}
 
-	_, err := u.requestPoliciesCloud(t.Context(), refererPage, "file.txt", 12, "text/plain")
+	_, err := u.requestPoliciesCloud(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
 	if err != nil {
 		t.Fatalf("requestPoliciesCloud() error = %v", err)
 	}
@@ -81,16 +80,15 @@ func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.
 
 	u := &Uploader{
 		baseURL:      server.URL,
-		repositoryID: 1,
-		client:       ghweb.NewClient(server.Client(), "", nil),
+		client:       web.NewClient(server.Client(), "", nil),
 		isEnterprise: false,
 	}
 	refererPage := &RefererPage{
 		URL:  "https://github.com/owner/repo/issues/new",
-		Body: []byte{},
+		Meta: refererPageMetadata{},
 	}
 
-	_, err := u.requestPoliciesCloud(t.Context(), refererPage, "file.txt", 12, "text/plain")
+	_, err := u.requestPoliciesCloud(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
 	if err != nil {
 		t.Fatalf("requestPoliciesCloud() error = %v", err)
 	}
@@ -119,17 +117,16 @@ func TestRequestPoliciesCloud_IgnoresAuthenticityTokenOnPage(t *testing.T) {
 
 	u := &Uploader{
 		baseURL:      server.URL,
-		repositoryID: 1,
-		client:       ghweb.NewClient(server.Client(), "", nil),
+		client:       web.NewClient(server.Client(), "", nil),
 		isEnterprise: false,
 	}
 	refererPage := &RefererPage{
 		URL: "https://github.com/owner/repo/issues/new",
 		// An unrelated authenticity_token on the page must not be sent on the cloud path.
-		Body: []byte(`<input name="authenticity_token" value="incidental-token"><meta name="fetch-nonce" content="nonce-123">`),
+		Meta: refererPageMetadata{AuthenticityToken: "incidental-token", FetchNonce: "nonce-123"},
 	}
 
-	_, err := u.requestPoliciesCloud(t.Context(), refererPage, "file.txt", 12, "text/plain")
+	_, err := u.requestPoliciesCloud(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
 	if err != nil {
 		t.Fatalf("requestPoliciesCloud() error = %v", err)
 	}
@@ -160,17 +157,16 @@ func TestRequestPoliciesEnterprise_SendsAuthTokenAndVerifiedFetch(t *testing.T) 
 
 	u := &Uploader{
 		baseURL:      server.URL,
-		repositoryID: 1,
-		client:       ghweb.NewClient(server.Client(), "", nil),
+		client:       web.NewClient(server.Client(), "", nil),
 		isEnterprise: true,
 	}
 	refererPage := &RefererPage{
 		URL: "https://github.enterprise.test/owner/repo/issues/new",
 		// Even a stray fetch-nonce meta must not be sent on the enterprise path.
-		Body: []byte(`<input name="authenticity_token" value="ghes-token"><meta name="fetch-nonce" content="nonce-123"><meta name="release" content="1.2.3">`),
+		Meta: refererPageMetadata{AuthenticityToken: "ghes-token", FetchNonce: "nonce-123", GitHubClientVersion: "1.2.3"},
 	}
 
-	_, err := u.requestPoliciesEnterprise(t.Context(), refererPage, "file.txt", 12, "text/plain")
+	_, err := u.requestPoliciesEnterprise(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
 	if err != nil {
 		t.Fatalf("requestPoliciesEnterprise() error = %v", err)
 	}
@@ -194,16 +190,15 @@ func TestRequestPoliciesEnterprise_FailsFastWhenAuthTokenMissing(t *testing.T) {
 
 	u := &Uploader{
 		baseURL:      server.URL,
-		repositoryID: 1,
-		client:       ghweb.NewClient(server.Client(), "", nil),
+		client:       web.NewClient(server.Client(), "", nil),
 		isEnterprise: true,
 	}
 	refererPage := &RefererPage{
 		URL:  "https://github.enterprise.test/owner/repo/issues/new",
-		Body: []byte{},
+		Meta: refererPageMetadata{},
 	}
 
-	_, err := u.requestPoliciesEnterprise(t.Context(), refererPage, "file.txt", 12, "text/plain")
+	_, err := u.requestPoliciesEnterprise(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
 	if err == nil {
 		t.Fatal("requestPoliciesEnterprise() error = nil, want an error")
 	}
@@ -231,17 +226,16 @@ func TestUploadEnterpriseFlow_SkipsFinalize(t *testing.T) {
 
 	u := &Uploader{
 		baseURL:      server.URL,
-		repositoryID: 1,
-		client:       ghweb.NewClient(server.Client(), "", nil),
+		client:       web.NewClient(server.Client(), "", nil),
 		isEnterprise: true,
 	}
 
 	refererPage := &RefererPage{
 		URL:  server.URL + "/owner/repo/issues/new",
-		Body: []byte(`<input name="authenticity_token" value="ghes-token">`),
+		Meta: refererPageMetadata{AuthenticityToken: "ghes-token"},
 	}
 
-	asset, err := u.Upload(t.Context(), tmpFile, refererPage)
+	asset, err := u.Upload(t.Context(), tmpFile, refererPage, 1)
 	if err != nil {
 		t.Fatalf("Upload() error = %v", err)
 	}
@@ -279,17 +273,16 @@ func TestUploadEnterpriseFlow_MediaHostGetsGHESOriginNotItsOwn(t *testing.T) {
 
 	u := &Uploader{
 		baseURL:      ghesServer.URL,
-		repositoryID: 1,
-		client:       ghweb.NewClient(ghesServer.Client(), "", nil),
+		client:       web.NewClient(ghesServer.Client(), "", nil),
 		isEnterprise: true,
 	}
 
 	refererPage := &RefererPage{
 		URL:  ghesServer.URL + "/owner/repo/issues/new",
-		Body: []byte(`<input name="authenticity_token" value="ghes-token">`),
+		Meta: refererPageMetadata{AuthenticityToken: "ghes-token"},
 	}
 
-	if _, err := u.Upload(t.Context(), tmpFile, refererPage); err != nil {
+	if _, err := u.Upload(t.Context(), tmpFile, refererPage, 1); err != nil {
 		t.Fatalf("Upload() error = %v", err)
 	}
 
@@ -342,17 +335,16 @@ func TestUploadCloudFlow_UsesRefererPageURLConsistently(t *testing.T) {
 
 	u := &Uploader{
 		baseURL:      server.URL,
-		repositoryID: 1,
-		client:       ghweb.NewClient(server.Client(), "", nil),
+		client:       web.NewClient(server.Client(), "", nil),
 		isEnterprise: false,
 	}
 
 	refererPage := &RefererPage{
 		URL:  server.URL + "/" + refererURL,
-		Body: []byte(`<meta name="fetch-nonce" content="nonce-xyz"><meta name="release" content="v1">`),
+		Meta: refererPageMetadata{FetchNonce: "nonce-xyz", GitHubClientVersion: "v1"},
 	}
 
-	asset, err := u.Upload(t.Context(), tmpFile, refererPage)
+	asset, err := u.Upload(t.Context(), tmpFile, refererPage, 1)
 	if err != nil {
 		t.Fatalf("Upload() error = %v", err)
 	}

@@ -1,4 +1,4 @@
-package ghapi
+package rest
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 const requestTimeout = 30 * time.Second
 
 type RESTGetter interface {
-	Get(path string, data interface{}) error
+	Get(path string, data any) error
 }
 
 type Service struct {

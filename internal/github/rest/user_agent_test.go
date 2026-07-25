@@ -1,4 +1,4 @@
-package ghapi
+package rest
 
 import "testing"
 

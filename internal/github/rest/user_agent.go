@@ -1,4 +1,4 @@
-package ghapi
+package rest
 
 import (
 	"regexp"
@@ -28,7 +28,7 @@ func githubCLIAppVersion() string {
 }
 
 func parseGHCLIVersion(output string) string {
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

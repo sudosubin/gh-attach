@@ -1,4 +1,4 @@
-package ghweb
+package web
 
 import (
 	"errors"

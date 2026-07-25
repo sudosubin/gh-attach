@@ -1,4 +1,4 @@
-package ghapi
+package rest
 
 import (
 	"fmt"
@@ -24,6 +24,9 @@ func (s *Service) ResolveRepository(owner string, name string) (Repository, erro
 	}
 	if err := s.client.Get(fmt.Sprintf("repos/%s/%s", owner, name), &repoResp); err != nil {
 		return Repository{}, err
+	}
+	if repoResp.ID <= 0 {
+		return Repository{}, fmt.Errorf("resolved repository %s/%s has no valid id", owner, name)
 	}
 
 	return Repository{

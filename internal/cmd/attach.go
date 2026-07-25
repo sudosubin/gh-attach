@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/sudosubin/gh-attach/internal/attach"
+	"github.com/sudosubin/gh-attach/internal/app"
 	"github.com/sudosubin/gh-attach/internal/cmdutil"
 	"github.com/sudosubin/gh-attach/internal/cookies"
 	"github.com/sudosubin/gh-attach/internal/formatting"
@@ -55,8 +55,8 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
 func attachRun(opts *AttachOptions) error {
 	ctx := context.Background()
 
-	svc := attach.NewService(os.Stderr)
-	asset, err := svc.Run(ctx, attach.Request{
+	svc := app.NewService(os.Stderr)
+	asset, err := svc.Run(ctx, app.Request{
 		FilePath:        opts.FilePath,
 		Repo:            opts.Repo,
 		Browser:         opts.Browser,
