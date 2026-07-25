@@ -132,7 +132,7 @@ func (u *Uploader) requestPoliciesCloud(ctx context.Context, refererPage *Refere
 		headers["X-GitHub-Client-Version"] = refererMeta.GitHubClientVersion
 	}
 
-	return u.requestPolicies(ctx, refererPage.URL, u.policiesFields(repositoryID, fileName, fileSize, contentType), headers)
+	return u.requestPolicies(ctx, refererPage.URL, policiesFields(repositoryID, fileName, fileSize, contentType), headers)
 }
 
 // requestPoliciesEnterprise authenticates via authenticity_token and fails fast if it's missing from the referer page.
@@ -142,13 +142,13 @@ func (u *Uploader) requestPoliciesEnterprise(ctx context.Context, refererPage *R
 		return policiesResponse{}, fmt.Errorf("enterprise host requires an authenticity_token, but none was found on the referer page")
 	}
 
-	fields := u.policiesFields(repositoryID, fileName, fileSize, contentType)
+	fields := policiesFields(repositoryID, fileName, fileSize, contentType)
 	fields["authenticity_token"] = refererMeta.AuthenticityToken
 
 	return u.requestPolicies(ctx, refererPage.URL, fields, map[string]string{})
 }
 
-func (u *Uploader) policiesFields(repositoryID int64, fileName string, fileSize int64, contentType string) map[string]string {
+func policiesFields(repositoryID int64, fileName string, fileSize int64, contentType string) map[string]string {
 	return map[string]string{
 		"repository_id": strconv.FormatInt(repositoryID, 10),
 		"name":          fileName,
