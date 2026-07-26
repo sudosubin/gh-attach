@@ -20,10 +20,6 @@ type RefererPageFetcher interface {
 	Fetch(ctx context.Context, client *web.Client) (*RefererPage, error)
 }
 
-type LatestCommitSHAResolver interface {
-	LatestCommitSHA(owner string, name string) (string, error)
-}
-
 func NewIssueNewPageFetcher(host string, repoFullName string) RefererPageFetcher {
 	return issueNewPageFetcher{host: host, repoFullName: repoFullName}
 }
@@ -38,28 +34,17 @@ func (f issueNewPageFetcher) Fetch(ctx context.Context, client *web.Client) (*Re
 	return fetchAndParse(ctx, client, pageURL)
 }
 
-func NewLatestCommitPageFetcher(host string, owner string, name string, resolver LatestCommitSHAResolver) RefererPageFetcher {
-	return latestCommitPageFetcher{host: host, owner: owner, name: name, resolver: resolver}
+func NewCommitsHeadPageFetcher(host string, repoFullName string) RefererPageFetcher {
+	return commitsHeadPageFetcher{host: host, repoFullName: repoFullName}
 }
 
-type latestCommitPageFetcher struct {
-	host     string
-	owner    string
-	name     string
-	resolver LatestCommitSHAResolver
+type commitsHeadPageFetcher struct {
+	host         string
+	repoFullName string
 }
 
-func (f latestCommitPageFetcher) Fetch(ctx context.Context, client *web.Client) (*RefererPage, error) {
-	if f.resolver == nil {
-		return nil, fmt.Errorf("latest commit resolver is required")
-	}
-
-	sha, err := f.resolver.LatestCommitSHA(f.owner, f.name)
-	if err != nil {
-		return nil, err
-	}
-
-	pageURL := fmt.Sprintf("https://%s/%s/%s/commit/%s", f.host, f.owner, f.name, sha)
+func (f commitsHeadPageFetcher) Fetch(ctx context.Context, client *web.Client) (*RefererPage, error) {
+	pageURL := fmt.Sprintf("https://%s/%s/commits/HEAD", f.host, f.repoFullName)
 	return fetchAndParse(ctx, client, pageURL)
 }
 
