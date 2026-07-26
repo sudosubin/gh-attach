@@ -34,7 +34,7 @@ func TestResolveRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 	mux.HandleFunc("GET /owner/repo/issues/new", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	})
-	mux.HandleFunc("GET /owner/repo/commits/HEAD", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /owner/repo/commit/HEAD", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`<meta name="csrf-token" content="commit-token"><meta name="octolytics-dimension-repository_id" content="777">`))
 	})
 
@@ -51,13 +51,13 @@ func TestResolveRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 		t.Context(),
 		[]RefererPageFetcher{
 			NewIssueNewPageFetcher(host, "owner/repo"),
-			NewCommitsHeadPageFetcher(host, "owner/repo"),
+			NewCommitHeadPageFetcher(host, "owner/repo"),
 		},
 	)
 	if err != nil {
 		t.Fatalf("ResolveRefererPage() error = %v", err)
 	}
-	if refererPage.URL != "https://"+host+"/owner/repo/commits/HEAD" {
+	if refererPage.URL != "https://"+host+"/owner/repo/commit/HEAD" {
 		t.Fatalf("refererPage.URL = %q", refererPage.URL)
 	}
 	// Parsed at fetch time: CSRF via the shared parser, repository_id via the octolytics pattern.
