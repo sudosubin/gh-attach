@@ -151,8 +151,23 @@ func TestExtractRepositoryID(t *testing.T) {
 	}{
 		{
 			name: "react databaseId (issues/new on github.com)",
-			html: `<script>{"repository":{"id":"R_kgABC","databaseId":261246700,"name":"nixos-config"}}</script>`,
+			html: `<script>{"repository":{"id":"R_kgABC","databaseId":261246700,"name":"repo"}}</script>`,
 			want: 261246700,
+		},
+		{
+			name: "react databaseId with reordered keys and whitespace",
+			html: `<script>{"repository" : {"name":"repo", "databaseId" : 261246700, "id":"R_kgABC"}}</script>`,
+			want: 261246700,
+		},
+		{
+			name: "nested databaseId is ignored",
+			html: `<script>{"repository":{"owner":{"databaseId":999}}}</script>`,
+			want: 0,
+		},
+		{
+			name: "upload attribute (issues/new on GHES)",
+			html: `<file-attachment data-upload-repository-id="416">`,
+			want: 416,
 		},
 		{
 			name: "octolytics meta (commit on github.com)",
@@ -165,14 +180,29 @@ func TestExtractRepositoryID(t *testing.T) {
 			want: 416,
 		},
 		{
-			name: "databaseId takes priority over octolytics when both present",
+			name: "deferred-side-panel data-url with encoded query separator",
+			html: `<deferred-side-panel data-url="/_side-panels/user?tab=files&amp;repository_id=416">`,
+			want: 416,
+		},
+		{
+			name: "upload attribute takes priority",
+			html: `<file-attachment data-upload-repository-id="100"><script>{"repository":{"id":"R_kgABC","databaseId":200}}</script>`,
+			want: 100,
+		},
+		{
+			name: "react databaseId takes priority over octolytics",
 			html: `<script>{"repository":{"id":"R_kgABC","databaseId":100}}</script><meta name="octolytics-dimension-repository_id" content="200">`,
 			want: 100,
 		},
 		{
-			name: "octolytics takes priority over data-url when both present",
+			name: "octolytics takes priority over deferred side panel",
 			html: `<meta name="octolytics-dimension-repository_id" content="100"><deferred-side-panel data-url="/x?repository_id=200">`,
 			want: 100,
+		},
+		{
+			name: "generic repository_id is ignored",
+			html: `<a href="/unrelated?repository_id=200"><div data-upload-repository-id="300">`,
+			want: 0,
 		},
 		{
 			name: "no repository id present",

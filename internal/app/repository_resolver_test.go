@@ -57,7 +57,7 @@ func TestPageRepositoryIDResolver(t *testing.T) {
 			refererPage := &attachments.RefererPage{}
 			refererPage.Meta.RepositoryID = tt.pageID
 
-			id, err := NewPageRepositoryIDResolver(tt.api).RepositoryID(refererPage, "octocat", "hello")
+			id, err := NewPageRepositoryIDResolver(tt.api).RepositoryID(refererPage, "owner", "repo")
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("RepositoryID() error = nil, want non-nil")
@@ -73,8 +73,8 @@ func TestPageRepositoryIDResolver(t *testing.T) {
 			if tt.api.calls != tt.wantAPICalls {
 				t.Fatalf("api.calls = %d, want %d", tt.api.calls, tt.wantAPICalls)
 			}
-			if tt.wantAPICalls > 0 && (tt.api.gotOwner != "octocat" || tt.api.gotName != "hello") {
-				t.Fatalf("api called with (%q, %q), want (%q, %q)", tt.api.gotOwner, tt.api.gotName, "octocat", "hello")
+			if tt.wantAPICalls > 0 && (tt.api.gotOwner != "owner" || tt.api.gotName != "repo") {
+				t.Fatalf("api called with (%q, %q), want (%q, %q)", tt.api.gotOwner, tt.api.gotName, "owner", "repo")
 			}
 		})
 	}
