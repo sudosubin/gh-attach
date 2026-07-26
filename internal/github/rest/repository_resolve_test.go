@@ -61,7 +61,7 @@ func TestResolveRepository(t *testing.T) {
 				t.Fatalf("NewService() error = %v", err)
 			}
 
-			repo, err := svc.ResolveRepository("octocat", "hello")
+			repo, err := svc.ResolveRepository("owner", "repo")
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("ResolveRepository() error = nil, want non-nil")
@@ -74,7 +74,7 @@ func TestResolveRepository(t *testing.T) {
 			if repo.ID != tt.wantID {
 				t.Fatalf("ResolveRepository() ID = %d, want %d", repo.ID, tt.wantID)
 			}
-			if repo.Owner != "octocat" || repo.Name != "hello" {
+			if repo.Owner != "owner" || repo.Name != "repo" {
 				t.Fatalf("ResolveRepository() repo = %#v", repo)
 			}
 		})
@@ -123,11 +123,11 @@ func TestResolveRepository_ErrorMentionsRepo(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	_, err = svc.ResolveRepository("octocat", "hello")
+	_, err = svc.ResolveRepository("owner", "repo")
 	if err == nil {
 		t.Fatalf("ResolveRepository() error = nil, want non-nil")
 	}
-	if !strings.Contains(err.Error(), "octocat/hello") {
-		t.Fatalf("error = %q, want to contain %q", err.Error(), "octocat/hello")
+	if !strings.Contains(err.Error(), "owner/repo") {
+		t.Fatalf("error = %q, want to contain %q", err.Error(), "owner/repo")
 	}
 }

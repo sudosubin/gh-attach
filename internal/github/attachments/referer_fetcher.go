@@ -97,21 +97,22 @@ func parseCSRFMetadata(html string) refererPageMetadata {
 	return meta
 }
 
-// Every fetcher tries all patterns, in priority order, since embedding varies by page/rendering.
+// Every fetcher tries exact patterns in priority order since embedding varies by page/rendering.
 var repositoryIDPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`"repository":\{"id":"[^"]*","databaseId":(\d+)`),
-	regexp.MustCompile(`octolytics-dimension-repository_id["'][^>]*content=["'](\d+)["']`),
-	regexp.MustCompile(`repository_id=(\d+)`),
+	regexp.MustCompile(`<file-attachment\b[^>]*data-upload-repository-id=["'](\d+)["']`),
+	regexp.MustCompile(`"repository"\s*:\s*\{[^{}]*"databaseId"\s*:\s*(\d+)`),
+	regexp.MustCompile(`<meta\b[^>]*name=["']octolytics-dimension-repository_id["'][^>]*content=["'](\d+)["']`),
+	regexp.MustCompile(`<deferred-side-panel\b[^>]*data-url=["'][^"']*(?:\?|&(?:amp;)?)repository_id=(\d+)[^"']*["']`),
 }
 
 // extractRepositoryID returns the first positive id matched, or 0 to signal API fallback.
 func extractRepositoryID(html string) int64 {
 	for _, pattern := range repositoryIDPatterns {
-		m := pattern.FindStringSubmatch(html)
-		if len(m) <= 1 {
+		match := pattern.FindStringSubmatch(html)
+		if len(match) <= 1 {
 			continue
 		}
-		id, err := strconv.ParseInt(m[1], 10, 64)
+		id, err := strconv.ParseInt(match[1], 10, 64)
 		if err != nil || id <= 0 {
 			continue
 		}
