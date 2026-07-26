@@ -34,17 +34,17 @@ func (f issueNewPageFetcher) Fetch(ctx context.Context, client *web.Client) (*Re
 	return fetchAndParse(ctx, client, pageURL)
 }
 
-func NewCommitsHeadPageFetcher(host string, repoFullName string) RefererPageFetcher {
-	return commitsHeadPageFetcher{host: host, repoFullName: repoFullName}
+func NewCommitHeadPageFetcher(host string, repoFullName string) RefererPageFetcher {
+	return commitHeadPageFetcher{host: host, repoFullName: repoFullName}
 }
 
-type commitsHeadPageFetcher struct {
+type commitHeadPageFetcher struct {
 	host         string
 	repoFullName string
 }
 
-func (f commitsHeadPageFetcher) Fetch(ctx context.Context, client *web.Client) (*RefererPage, error) {
-	pageURL := fmt.Sprintf("https://%s/%s/commits/HEAD", f.host, f.repoFullName)
+func (f commitHeadPageFetcher) Fetch(ctx context.Context, client *web.Client) (*RefererPage, error) {
+	pageURL := fmt.Sprintf("https://%s/%s/commit/HEAD", f.host, f.repoFullName)
 	return fetchAndParse(ctx, client, pageURL)
 }
 
