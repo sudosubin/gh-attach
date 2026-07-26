@@ -12,18 +12,6 @@ import (
 	"github.com/sudosubin/gh-attach/internal/github/web"
 )
 
-type stubLatestCommitResolver struct {
-	sha string
-	err error
-}
-
-func (r stubLatestCommitResolver) LatestCommitSHA(_ string, _ string) (string, error) {
-	if r.err != nil {
-		return "", r.err
-	}
-	return r.sha, nil
-}
-
 func TestIssueNewPageFetcher_ReturnsNilOnStatusCodeError(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -42,17 +30,15 @@ func TestIssueNewPageFetcher_ReturnsNilOnStatusCodeError(t *testing.T) {
 }
 
 func TestResolveRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/owner/repo/issues/new":
-			w.WriteHeader(http.StatusNotFound)
-		case "/owner/repo/commit/abc123":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`<meta name="csrf-token" content="commit-token"><meta name="octolytics-dimension-repository_id" content="777">`))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /owner/repo/issues/new", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("GET /owner/repo/commits/HEAD", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<meta name="csrf-token" content="commit-token"><meta name="octolytics-dimension-repository_id" content="777">`))
+	})
+
+	server := httptest.NewTLSServer(mux)
 	defer server.Close()
 
 	host := mustHost(t, server.URL)
@@ -65,13 +51,13 @@ func TestResolveRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 		t.Context(),
 		[]RefererPageFetcher{
 			NewIssueNewPageFetcher(host, "owner/repo"),
-			NewLatestCommitPageFetcher(host, "owner", "repo", stubLatestCommitResolver{sha: "abc123"}),
+			NewCommitsHeadPageFetcher(host, "owner/repo"),
 		},
 	)
 	if err != nil {
 		t.Fatalf("ResolveRefererPage() error = %v", err)
 	}
-	if refererPage.URL != "https://"+host+"/owner/repo/commit/abc123" {
+	if refererPage.URL != "https://"+host+"/owner/repo/commits/HEAD" {
 		t.Fatalf("refererPage.URL = %q", refererPage.URL)
 	}
 	// Parsed at fetch time: CSRF via the shared parser, repository_id via the octolytics pattern.

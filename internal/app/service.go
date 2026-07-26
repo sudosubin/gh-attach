@@ -78,7 +78,7 @@ func (s *Service) Run(ctx context.Context, req Request) (attachments.Asset, erro
 		ctx,
 		[]attachments.RefererPageFetcher{
 			attachments.NewIssueNewPageFetcher(repo.Host, repo.FullName()),
-			attachments.NewLatestCommitPageFetcher(repo.Host, repo.Owner, repo.Name, ghService),
+			attachments.NewCommitsHeadPageFetcher(repo.Host, repo.FullName()),
 		},
 	)
 	if err != nil {
