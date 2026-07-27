@@ -123,8 +123,7 @@ func checkJSONFlags(cmd *cobra.Command) (*jsonFlags, error) {
 	return nil, nil
 }
 
-// IsFlagError reports whether err came from command-line flag parsing.
-func IsFlagError(err error) bool {
+func ShouldShowUsage(err error) bool {
 	var target *flagError
 	return errors.As(err, &target)
 }

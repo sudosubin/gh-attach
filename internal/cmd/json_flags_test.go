@@ -39,12 +39,12 @@ func TestAddJSONFlags_Errors(t *testing.T) {
 		name          string
 		args          []string
 		want          string
-		wantFlagError bool
+		wantShowUsage bool
 	}{
 		{name: "missing json arg", args: []string{"--json"}, want: "specify one or more comma-separated fields for `--json`"},
 		{name: "jq without json", args: []string{"--jq", ".href"}, want: "cannot use `--jq` without specifying `--json`"},
 		{name: "unknown field", args: []string{"--json", "nope"}, want: "unknown JSON field: \"nope\""},
-		{name: "unknown flag", args: []string{"--nope"}, want: "unknown flag: --nope", wantFlagError: true},
+		{name: "unknown flag", args: []string{"--nope"}, want: "unknown flag: --nope", wantShowUsage: true},
 	}
 
 	for _, tt := range tests {
@@ -63,8 +63,8 @@ func TestAddJSONFlags_Errors(t *testing.T) {
 			if !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("error %q does not contain %q", err.Error(), tt.want)
 			}
-			if got := IsFlagError(err); got != tt.wantFlagError {
-				t.Fatalf("IsFlagError() = %v, want %v", got, tt.wantFlagError)
+			if got := ShouldShowUsage(err); got != tt.wantShowUsage {
+				t.Fatalf("ShouldShowUsage() = %v, want %v", got, tt.wantShowUsage)
 			}
 		})
 	}

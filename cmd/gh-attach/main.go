@@ -11,7 +11,7 @@ func main() {
 	root := cmd.NewCmdRoot()
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		if cmd.IsFlagError(err) {
+		if cmd.ShouldShowUsage(err) {
 			fmt.Fprintln(os.Stderr)
 			fmt.Fprintln(os.Stderr, root.UsageString())
 		}
