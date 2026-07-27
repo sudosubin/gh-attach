@@ -10,7 +10,7 @@ const maxRedirects = 10
 
 var authHeaders = []string{"Authorization", "GitHub-Remote-Auth"}
 
-func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
+func (*Client) checkRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= maxRedirects {
 		return errors.New("ghweb: stopped after 10 redirects")
 	}
@@ -26,7 +26,7 @@ func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
 			req.Header.Del(h)
 		}
 	}
-	return c.attachCookie(req)
+	return nil
 }
 
 func crossedHost(firstHost, dest string, via []*http.Request) bool {

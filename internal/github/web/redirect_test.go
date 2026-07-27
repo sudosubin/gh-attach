@@ -87,22 +87,6 @@ func TestCheckRedirect_KeepsAuthHeadersStrippedAfterReturningToOriginalOrigin(t 
 	}
 }
 
-func TestCheckRedirect_RecomputesCookieForSameHost(t *testing.T) {
-	c := NewClient(nil, "test-agent", []*http.Cookie{
-		{Name: "user_session", Value: "secret", Domain: "github.test", Path: "/"},
-	})
-
-	initial := mustRequest(t, "https://github.test/a")
-	next := mustRequest(t, "https://github.test/b")
-
-	if err := c.checkRedirect(next, []*http.Request{initial}); err != nil {
-		t.Fatalf("checkRedirect() error = %v", err)
-	}
-	if next.Header.Get("Cookie") != "user_session=secret" {
-		t.Fatalf("Cookie = %q, want %q", next.Header.Get("Cookie"), "user_session=secret")
-	}
-}
-
 func TestCheckRedirect_RejectsHTTPSDowngrade(t *testing.T) {
 	c := NewClient(nil, "test-agent", nil)
 

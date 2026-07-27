@@ -8,9 +8,13 @@ import (
 )
 
 func main() {
-	if err := cmd.NewCmdRoot().Execute(); err != nil {
+	root := cmd.NewCmdRoot()
+	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		fmt.Fprintln(os.Stderr, "Run 'gh-attach --help' for usage.")
+		if cmd.IsFlagError(err) {
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, root.UsageString())
+		}
 		os.Exit(1)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/sudosubin/gh-attach/internal/github/web"
@@ -14,6 +15,98 @@ func newTestUploader(server *httptest.Server, enterprise bool) *Uploader {
 		baseURL:      server.URL,
 		client:       web.NewClient(server.Client(), "", nil),
 		isEnterprise: enterprise,
+	}
+}
+
+func TestContentTypeForFile(t *testing.T) {
+	tests := map[string]string{
+		".bmp":  "image/bmp",
+		".css":  "text/css",
+		".csv":  "text/csv",
+		".doc":  "application/msword",
+		".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		".eml":  "message/rfc822",
+		".fodg": "application/vnd.oasis.opendocument.graphics",
+		".fodp": "application/vnd.oasis.opendocument.presentation",
+		".fods": "application/vnd.oasis.opendocument.spreadsheet",
+		".fodt": "application/vnd.oasis.opendocument.text",
+		".gif":  "image/gif",
+		".gz":   "application/x-gzip",
+		".htm":  "text/html",
+		".html": "text/html",
+		".jpeg": "image/jpeg",
+		".jpg":  "image/jpeg",
+		".js":   "text/javascript",
+		".json": "application/json",
+		".md":   "text/markdown",
+		".mov":  "video/quicktime",
+		".mp3":  "audio/mpeg",
+		".mp4":  "video/mp4",
+		".odf":  "application/vnd.oasis.opendocument.formula",
+		".odg":  "application/vnd.oasis.opendocument.graphics",
+		".odp":  "application/vnd.oasis.opendocument.presentation",
+		".ods":  "application/vnd.oasis.opendocument.spreadsheet",
+		".odt":  "application/vnd.oasis.opendocument.text",
+		".pdb":  "application/octet-stream",
+		".pdf":  "application/pdf",
+		".php":  "text/php",
+		".png":  "image/png",
+		".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+		".py":   "text/x-python-script",
+		".rtf":  "text/rtf",
+		".sh":   "text/x-sh",
+		".svg":  "image/svg+xml",
+		".tgz":  "application/gzip",
+		".tif":  "image/tiff",
+		".tiff": "image/tiff",
+		".tsv":  "text/tab-separated-values",
+		".txt":  "text/plain",
+		".wav":  "audio/wav",
+		".webm": "video/webm",
+		".webp": "image/webp",
+		".xls":  "application/vnd.ms-excel",
+		".xlsm": "application/vnd.ms-excel.sheet.macroenabled.12",
+		".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		".xml":  "text/xml",
+		".yaml": "application/x-yaml",
+		".yml":  "application/x-yaml",
+		".zip":  "application/zip",
+	}
+
+	for extension, want := range tests {
+		t.Run(extension, func(t *testing.T) {
+			got := contentTypeForFile("file" + extension)
+			if got != want {
+				t.Fatalf("contentTypeForFile() = %q, want %q", got, want)
+			}
+		})
+	}
+	if got := contentTypeForFile("FILE.TXT"); got != "text/plain" {
+		t.Fatalf("contentTypeForFile() = %q, want %q", got, "text/plain")
+	}
+}
+
+func TestContentTypeForFile_ServerInferredExtensionsAreExplicit(t *testing.T) {
+	extensions := []string{
+		".c", ".copilotmd", ".cpp", ".cpuprofile", ".cs", ".debug", ".dmp", ".drawio", ".ipynb",
+		".java", ".jsonc", ".log", ".msg", ".patch", ".sql", ".ts", ".tsx",
+	}
+
+	for _, extension := range extensions {
+		t.Run(extension, func(t *testing.T) {
+			contentType, ok := contentTypesByExtension[extension]
+			if !ok || contentType != "" {
+				t.Fatalf("contentTypesByExtension[%q] = %q, %v; want empty, true", extension, contentType, ok)
+			}
+		})
+	}
+}
+
+func TestContentTypeForFile_UnknownExtensionUsesServerInference(t *testing.T) {
+	for _, fileName := range []string{"archive.rar", "README"} {
+		if got := contentTypeForFile(fileName); got != "" {
+			t.Errorf("contentTypeForFile(%q) = %q, want empty", fileName, got)
+		}
 	}
 }
 
@@ -193,21 +286,28 @@ func TestRequestPoliciesEnterprise_FailsFastWhenAuthTokenMissing(t *testing.T) {
 }
 
 func TestUploadEnterpriseFlow_SkipsFinalize(t *testing.T) {
-	tmpFile := t.TempDir() + "/probe.png"
+	tmpFile := t.TempDir() + "/probe.patch"
 	if err := os.WriteFile(tmpFile, []byte("probe"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
+
+	var policiesContentType, uploadContentType string
 
 	mux := http.NewServeMux()
 	// No finalize handler registered — a stray call would 404 and fail Upload().
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	mux.HandleFunc("/upload/policies/assets", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/upload/policies/assets", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("ParseMultipartForm() error = %v", err)
+		}
+		policiesContentType = r.FormValue("content_type")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"upload_url":"` + server.URL + `/media/upload","form":{},"header":{}}`))
 	})
-	mux.HandleFunc("/media/upload", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/media/upload", func(w http.ResponseWriter, r *http.Request) {
+		uploadContentType = r.Header.Get("X-File-Content-Type")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"id":1,"href":"https://github.enterprise.test/user-attachments/assets/abc"}`))
 	})
@@ -225,6 +325,41 @@ func TestUploadEnterpriseFlow_SkipsFinalize(t *testing.T) {
 	}
 	if asset.Href != "https://github.enterprise.test/user-attachments/assets/abc" {
 		t.Fatalf("asset.Href = %q, want the media upload response's href", asset.Href)
+	}
+	if policiesContentType != "" || uploadContentType != "" {
+		t.Fatalf("content types = (%q, %q), want both empty", policiesContentType, uploadContentType)
+	}
+}
+
+func TestUploadEnterpriseFlow_ReturnsPolicyErrorForUnsupportedFileType(t *testing.T) {
+	tmpFile := t.TempDir() + "/probe.js"
+	if err := os.WriteFile(tmpFile, []byte("probe"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("ParseMultipartForm() error = %v", err)
+		}
+		if got := r.FormValue("content_type"); got != "text/javascript" {
+			t.Fatalf("content_type = %q, want %q", got, "text/javascript")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"message":"Validation Failed","errors":["We don’t support that file type."]}`))
+	}))
+	defer server.Close()
+
+	uploader := newTestUploader(server, true)
+	_, err := uploader.Upload(t.Context(), tmpFile, &RefererPage{
+		URL:  server.URL + "/owner/repo/issues/new",
+		Meta: refererPageMetadata{AuthenticityToken: "ghes-token"},
+	}, 123)
+	if err == nil {
+		t.Fatal("Upload() error = nil, want server policy error")
+	}
+	if got := err.Error(); !strings.Contains(got, "HTTP 422") || !strings.Contains(got, "We don’t support that file type.") {
+		t.Fatalf("Upload() error = %q, want status and server detail", got)
 	}
 }
 
@@ -277,13 +412,14 @@ func TestUploadEnterpriseFlow_MediaHostGetsGHESOriginNotItsOwn(t *testing.T) {
 }
 
 func TestUploadCloudFlow_UsesRefererPageURLConsistently(t *testing.T) {
-	tmpFile := t.TempDir() + "/probe.png"
+	tmpFile := t.TempDir() + "/probe.dmp"
 	if err := os.WriteFile(tmpFile, []byte("probe"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
 	var policiesReferer, uploadReferer, uploadOrigin, finalizeReferer string
 	var finalizeFetchNonce, finalizeClientVersion string
+	var policiesContentType, uploadContentType string
 
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
@@ -297,12 +433,17 @@ func TestUploadCloudFlow_UsesRefererPageURLConsistently(t *testing.T) {
 
 	mux.HandleFunc("/upload/policies/assets", func(w http.ResponseWriter, r *http.Request) {
 		policiesReferer = r.Header.Get("Referer")
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("ParseMultipartForm() error = %v", err)
+		}
+		policiesContentType = r.FormValue("content_type")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"upload_url":"` + s3Server.URL + `/s3","form":{},"header":{},"asset_upload_url":"/upload/assets/1","asset_upload_authenticity_token":"final-token"}`))
 	})
 	s3Mux.HandleFunc("/s3", func(w http.ResponseWriter, r *http.Request) {
 		uploadReferer = r.Header.Get("Referer")
 		uploadOrigin = r.Header.Get("Origin")
+		uploadContentType = r.Header.Get("X-File-Content-Type")
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("/upload/assets/1", func(w http.ResponseWriter, r *http.Request) {
@@ -326,6 +467,9 @@ func TestUploadCloudFlow_UsesRefererPageURLConsistently(t *testing.T) {
 	}
 	if asset.Href != "https://github.test/user-attachments/assets/final" {
 		t.Fatalf("asset.Href = %q", asset.Href)
+	}
+	if policiesContentType != "" || uploadContentType != "" {
+		t.Fatalf("content types = (%q, %q), want both empty", policiesContentType, uploadContentType)
 	}
 
 	for label, got := range map[string]string{

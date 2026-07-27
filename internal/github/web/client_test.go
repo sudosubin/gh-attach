@@ -3,7 +3,6 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 )
@@ -17,13 +16,8 @@ func TestClientDoMultipart_OmitsCookiesScopedToADifferentHost(t *testing.T) {
 	}))
 	defer server.Close()
 
-	serverHost, err := url.Parse(server.URL)
-	if err != nil {
-		t.Fatalf("url.Parse() error = %v", err)
-	}
-
 	c := NewClient(server.Client(), "test-agent", []*http.Cookie{
-		{Name: "user_session", Value: "secret", Domain: serverHost.Hostname(), Path: "/"},
+		{Name: "user_session", Value: "secret", Domain: mustURL(t, server.URL).Hostname(), Path: "/"},
 		// Scoped to a different host — must never leak to this request.
 		{Name: "other_session", Value: "leak-me-not", Domain: "s3.example.com", Path: "/"},
 	})
@@ -60,13 +54,8 @@ func TestClientGet_ScopesCookiesAndReportsStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	serverHost, err := url.Parse(server.URL)
-	if err != nil {
-		t.Fatalf("url.Parse() error = %v", err)
-	}
-
 	c := NewClient(server.Client(), "test-agent", []*http.Cookie{
-		{Name: "user_session", Value: "secret", Domain: serverHost.Hostname(), Path: "/"},
+		{Name: "user_session", Value: "secret", Domain: mustURL(t, server.URL).Hostname(), Path: "/"},
 		{Name: "other_session", Value: "leak-me-not", Domain: "s3.example.com", Path: "/"},
 	})
 
@@ -101,5 +90,34 @@ func TestClientGet_ScopesCookiesAndReportsStatus(t *testing.T) {
 	}
 	if body != nil {
 		t.Fatalf("body = %q, want nil on non-200", body)
+	}
+}
+
+func TestClient_PreservesResponseCookies(t *testing.T) {
+	var receivedCookie string
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	mux.HandleFunc("/page", func(w http.ResponseWriter, _ *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "_gh_sess", Value: "fresh", Path: "/"})
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+		receivedCookie = r.Header.Get("Cookie")
+		w.WriteHeader(http.StatusOK)
+	})
+
+	c := NewClient(server.Client(), "test-agent", []*http.Cookie{
+		{Name: "user_session", Value: "initial", Domain: mustURL(t, server.URL).Hostname(), Path: "/"},
+	})
+	if _, status, getErr := c.Get(t.Context(), server.URL+"/page"); getErr != nil || status != http.StatusOK {
+		t.Fatalf("Get() = status %d, error %v", status, getErr)
+	}
+	if _, err := c.DoMultipart(t.Context(), Request{Method: http.MethodPost, URL: server.URL + "/upload"}); err != nil {
+		t.Fatalf("DoMultipart() error = %v", err)
+	}
+	if !strings.Contains(receivedCookie, "_gh_sess=fresh") {
+		t.Fatalf("Cookie = %q, want response cookie", receivedCookie)
 	}
 }
