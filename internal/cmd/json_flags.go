@@ -3,7 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -12,6 +12,18 @@ import (
 
 type jsonFlagError struct {
 	error
+}
+
+type flagError struct {
+	err error
+}
+
+func (e *flagError) Error() string {
+	return e.err.Error()
+}
+
+func (e *flagError) Unwrap() error {
+	return e.err
 }
 
 type jsonFlags struct {
@@ -53,8 +65,7 @@ func addJSONFlags(cmd *cobra.Command, target *jsonFlags, fields []string) {
 			}
 			for _, name := range export.Fields {
 				if _, ok := allowed[name]; !ok {
-					sorted := append([]string(nil), fields...)
-					sort.Strings(sorted)
+					sorted := slices.Sorted(slices.Values(fields))
 					return jsonFlagError{fmt.Errorf("unknown JSON field: %q\nAvailable fields:\n  %s", name, strings.Join(sorted, "\n  "))}
 				}
 			}
@@ -68,14 +79,13 @@ func addJSONFlags(cmd *cobra.Command, target *jsonFlags, fields []string) {
 
 	cmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
 		if c == cmd && err.Error() == "flag needs an argument: --json" {
-			sorted := append([]string(nil), fields...)
-			sort.Strings(sorted)
+			sorted := slices.Sorted(slices.Values(fields))
 			return jsonFlagError{fmt.Errorf("specify one or more comma-separated fields for `--json`:\n  %s", strings.Join(sorted, "\n  "))}
 		}
 		if cmd.HasParent() {
 			return cmd.Parent().FlagErrorFunc()(c, err)
 		}
-		return err
+		return &flagError{err: err}
 	})
 
 	if len(fields) > 0 {
@@ -111,4 +121,9 @@ func checkJSONFlags(cmd *cobra.Command) (*jsonFlags, error) {
 		return nil, errors.New("cannot use `--template` without specifying `--json`")
 	}
 	return nil, nil
+}
+
+func ShouldShowUsage(err error) bool {
+	var target *flagError
+	return errors.As(err, &target)
 }

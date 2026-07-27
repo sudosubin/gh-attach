@@ -7,44 +7,37 @@ import (
 	"strings"
 )
 
-func cookieHeaderForURL(cookies []*http.Cookie, rawURL string) (string, error) {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "", err
-	}
+type scopedCookieJar struct {
+	jar   http.CookieJar
+	hosts map[string]struct{}
+}
 
-	// Collapse duplicate (Name, Domain, Path) keys last-wins; Firefox folds dFPI/private-browsing cookies into the default container.
-	type cookieKey struct{ name, domain, path string }
-	index := map[cookieKey]int{}
-	deduped := make([]*http.Cookie, 0, len(cookies))
+func newScopedCookieJar(cookies []*http.Cookie) http.CookieJar {
+	jar, _ := cookiejar.New(nil)
+	scoped := &scopedCookieJar{jar: jar, hosts: map[string]struct{}{}}
 	for _, c := range cookies {
-		key := cookieKey{c.Name, c.Domain, c.Path}
-		if i, ok := index[key]; ok {
-			deduped[i] = c
-			continue
-		}
-		index[key] = len(deduped)
-		deduped = append(deduped, c)
-	}
-
-	// GitHub cookies are host-only in practice; cookiejar treats any non-empty Domain as subdomain-eligible, so cookies are pre-filtered to an exact host match first.
-	host := u.Hostname()
-	scoped := make([]*http.Cookie, 0, len(deduped))
-	for _, c := range deduped {
-		if strings.EqualFold(strings.TrimPrefix(c.Domain, "."), host) {
-			scoped = append(scoped, c)
+		if host := strings.ToLower(strings.TrimPrefix(c.Domain, ".")); host != "" {
+			scoped.hosts[host] = struct{}{}
 		}
 	}
-
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		return "", err
+	for _, c := range cookies {
+		host := strings.TrimPrefix(c.Domain, ".")
+		if host != "" {
+			scoped.jar.SetCookies(&url.URL{Scheme: "https", Host: host, Path: "/"}, []*http.Cookie{c})
+		}
 	}
-	jar.SetCookies(u, scoped)
+	return scoped
+}
 
-	pairs := make([]string, 0, len(scoped))
-	for _, c := range jar.Cookies(u) {
-		pairs = append(pairs, c.Name+"="+c.Value)
+func (j *scopedCookieJar) Cookies(u *url.URL) []*http.Cookie {
+	if _, ok := j.hosts[strings.ToLower(u.Hostname())]; !ok {
+		return nil
 	}
-	return strings.Join(pairs, "; "), nil
+	return j.jar.Cookies(u)
+}
+
+func (j *scopedCookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
+	if _, ok := j.hosts[strings.ToLower(u.Hostname())]; ok {
+		j.jar.SetCookies(u, cookies)
+	}
 }

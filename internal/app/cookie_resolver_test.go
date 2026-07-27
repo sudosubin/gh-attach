@@ -63,47 +63,27 @@ func TestCookieResolver_MatchesAnyDotcomUserValue(t *testing.T) {
 	}
 }
 
-func TestCookieResolver_SkipsOnMissingDotcomUser(t *testing.T) {
+func TestCookieResolver_RejectsSessionsWithoutMatchingLogin(t *testing.T) {
 	t.Parallel()
 
-	sources := []cookies.Source{{Browser: cookies.BrowserChromium}}
-	providers := map[cookies.Browser]browserprovider.BrowserProvider{
-		cookies.BrowserChromium: stubProvider{
-			backend: "sweetcookie",
-			sessions: []browserprovider.BrowserSession{{
-				Browser:   cookies.BrowserChromium,
-				Cookies:   []*http.Cookie{{Name: "other_cookie", Value: "value"}},
-				UserAgent: "ua",
-			}},
-		},
+	tests := map[string][]*http.Cookie{
+		"missing dotcom_user": {{Name: "other_cookie", Value: "value"}},
+		"login mismatch":      {{Name: "dotcom_user", Value: "someone-else"}},
 	}
 
-	resolver := NewCookieResolver(providers, false, nil)
-	_, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
-	if err == nil {
-		t.Fatalf("Resolve() error = nil, want non-nil")
-	}
-}
-
-func TestCookieResolver_SkipsOnLoginMismatch(t *testing.T) {
-	t.Parallel()
-
-	sources := []cookies.Source{{Browser: cookies.BrowserChromium}}
-	providers := map[cookies.Browser]browserprovider.BrowserProvider{
-		cookies.BrowserChromium: stubProvider{
-			backend: "sweetcookie",
-			sessions: []browserprovider.BrowserSession{{
-				Browser:   cookies.BrowserChromium,
-				Cookies:   []*http.Cookie{{Name: "dotcom_user", Value: "someone-else"}},
-				UserAgent: "ua",
-			}},
-		},
-	}
-
-	resolver := NewCookieResolver(providers, false, nil)
-	_, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
-	if err == nil {
-		t.Fatalf("Resolve() error = nil, want non-nil")
+	for name, sessionCookies := range tests {
+		t.Run(name, func(t *testing.T) {
+			providers := map[cookies.Browser]browserprovider.BrowserProvider{
+				cookies.BrowserChromium: stubProvider{sessions: []browserprovider.BrowserSession{{
+					Browser: cookies.BrowserChromium,
+					Cookies: sessionCookies,
+				}}},
+			}
+			resolver := NewCookieResolver(providers, false, nil)
+			if _, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", []cookies.Source{{Browser: cookies.BrowserChromium}}); err == nil {
+				t.Fatal("Resolve() error = nil, want non-nil")
+			}
+		})
 	}
 }
 

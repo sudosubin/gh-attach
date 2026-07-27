@@ -18,7 +18,6 @@ import (
 type Client struct {
 	httpClient *http.Client
 	userAgent  string
-	cookies    []*http.Cookie
 }
 
 func NewClient(httpClient *http.Client, userAgent string, cookies []*http.Cookie) *Client {
@@ -26,9 +25,10 @@ func NewClient(httpClient *http.Client, userAgent string, cookies []*http.Cookie
 		httpClient = &http.Client{}
 	}
 
-	c := &Client{userAgent: userAgent, cookies: cookies}
+	c := &Client{userAgent: userAgent}
 	wrapped := *httpClient
 	wrapped.CheckRedirect = c.checkRedirect
+	wrapped.Jar = newScopedCookieJar(cookies)
 	c.httpClient = &wrapped
 	return c
 }
@@ -83,9 +83,6 @@ func (c *Client) DoMultipart(ctx context.Context, req Request) ([]byte, error) {
 	}
 	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
 	httpReq.Header.Set("User-Agent", c.userAgent)
-	if err := c.attachCookie(httpReq); err != nil {
-		return nil, err
-	}
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -110,9 +107,6 @@ func (c *Client) Get(ctx context.Context, pageURL string) (body []byte, statusCo
 		return nil, 0, err
 	}
 	req.Header.Set("User-Agent", c.userAgent)
-	if err := c.attachCookie(req); err != nil {
-		return nil, 0, err
-	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -138,16 +132,5 @@ func setDefaultHeaders(req *http.Request, referer string) error {
 	}
 	req.Header.Set("Origin", refURL.Scheme+"://"+refURL.Host)
 	req.Header.Set("Referer", referer)
-	return nil
-}
-
-func (c *Client) attachCookie(req *http.Request) error {
-	cookieHeader, err := cookieHeaderForURL(c.cookies, req.URL.String())
-	if err != nil {
-		return err
-	}
-	if cookieHeader != "" {
-		req.Header.Set("Cookie", cookieHeader)
-	}
 	return nil
 }

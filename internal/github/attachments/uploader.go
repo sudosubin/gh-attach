@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,6 +22,79 @@ type Uploader struct {
 	baseURL      string // e.g. "https://github.com"
 	client       *web.Client
 	isEnterprise bool
+}
+
+// contentTypesByExtension contains known browser-compatible MIME hints.
+// Empty content types intentionally let the server infer from the extension.
+var contentTypesByExtension = map[string]string{
+	".bmp":        "image/bmp",
+	".c":          "",
+	".copilotmd":  "",
+	".cpp":        "",
+	".cpuprofile": "",
+	".cs":         "",
+	".css":        "text/css",
+	".csv":        "text/csv",
+	".debug":      "",
+	".dmp":        "",
+	".doc":        "application/msword",
+	".docx":       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	".drawio":     "",
+	".eml":        "message/rfc822",
+	".fodg":       "application/vnd.oasis.opendocument.graphics",
+	".fodp":       "application/vnd.oasis.opendocument.presentation",
+	".fods":       "application/vnd.oasis.opendocument.spreadsheet",
+	".fodt":       "application/vnd.oasis.opendocument.text",
+	".gif":        "image/gif",
+	".gz":         "application/x-gzip",
+	".htm":        "text/html",
+	".html":       "text/html",
+	".ipynb":      "",
+	".java":       "",
+	".jpeg":       "image/jpeg",
+	".jpg":        "image/jpeg",
+	".js":         "text/javascript",
+	".json":       "application/json",
+	".jsonc":      "",
+	".log":        "",
+	".md":         "text/markdown",
+	".mov":        "video/quicktime",
+	".mp3":        "audio/mpeg",
+	".mp4":        "video/mp4",
+	".msg":        "",
+	".odf":        "application/vnd.oasis.opendocument.formula",
+	".odg":        "application/vnd.oasis.opendocument.graphics",
+	".odp":        "application/vnd.oasis.opendocument.presentation",
+	".ods":        "application/vnd.oasis.opendocument.spreadsheet",
+	".odt":        "application/vnd.oasis.opendocument.text",
+	".patch":      "",
+	".pdb":        "application/octet-stream",
+	".pdf":        "application/pdf",
+	".php":        "text/php",
+	".png":        "image/png",
+	".pptx":       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	".py":         "text/x-python-script",
+	".rtf":        "text/rtf",
+	".sh":         "text/x-sh",
+	".sql":        "",
+	".svg":        "image/svg+xml",
+	".tgz":        "application/gzip",
+	".tif":        "image/tiff",
+	".tiff":       "image/tiff",
+	".ts":         "",
+	".tsv":        "text/tab-separated-values",
+	".tsx":        "",
+	".txt":        "text/plain",
+	".wav":        "audio/wav",
+	".webm":       "video/webm",
+	".webp":       "image/webp",
+	".xls":        "application/vnd.ms-excel",
+	".xlsm":       "application/vnd.ms-excel.sheet.macroenabled.12",
+	".xlsx":       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	".xml":        "text/xml",
+	".yaml":       "application/x-yaml",
+	".yml":        "application/x-yaml",
+	".zip":        "application/zip",
 }
 
 func NewUploader(host string, session browserprovider.BrowserSession, client *http.Client) (*Uploader, error) {
@@ -70,15 +142,17 @@ func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *Ref
 	}
 
 	fileName := filepath.Base(filePath)
-	contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(fileName)))
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
+	contentType := contentTypeForFile(fileName)
 
 	if u.isEnterprise {
 		return u.uploadEnterpriseFlow(ctx, filePath, refererPage, repositoryID, fileName, fileInfo.Size(), contentType)
 	}
 	return u.uploadCloudFlow(ctx, filePath, refererPage, repositoryID, fileName, fileInfo.Size(), contentType)
+}
+
+func contentTypeForFile(fileName string) string {
+	extension := strings.ToLower(filepath.Ext(fileName))
+	return contentTypesByExtension[extension]
 }
 
 // uploadCloudFlow is github.com's 3-step upload: policies -> S3 -> finalize.

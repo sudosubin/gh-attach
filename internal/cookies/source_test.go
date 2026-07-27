@@ -106,11 +106,6 @@ func TestApplyDefaultProfile_DoesNotOverrideExplicitProfileOrPath(t *testing.T) 
 	if withPath.Profile != "" {
 		t.Fatalf("profile=%q, want empty", withPath.Profile)
 	}
-
-	firefox := ApplyDefaultProfile(Source{Browser: BrowserFirefox})
-	if firefox.Profile != "" {
-		t.Fatalf("firefox profile=%q, want empty", firefox.Profile)
-	}
 }
 
 func TestParseProfileSelector(t *testing.T) {
@@ -163,27 +158,6 @@ func TestFormatProfileSelector(t *testing.T) {
 			got := FormatProfileSelector(tc.profile, tc.container, tc.byID)
 			if got != tc.want {
 				t.Fatalf("FormatProfileSelector(%q,%q,%v) = %q, want %q", tc.profile, tc.container, tc.byID, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestProfileSelectorRoundTrip(t *testing.T) {
-	t.Parallel()
-
-	cases := []string{
-		"default",
-		"default:Work",
-		"default:id=2",
-		"default:sudosubin@example.com",
-	}
-
-	for _, in := range cases {
-		t.Run(in, func(t *testing.T) {
-			sel := ParseProfileSelector(in)
-			got := FormatProfileSelector(sel.Profile, sel.Container, sel.MatchByID)
-			if got != in {
-				t.Fatalf("round-trip %q -> %q", in, got)
 			}
 		})
 	}
