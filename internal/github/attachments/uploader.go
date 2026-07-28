@@ -135,7 +135,7 @@ func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *Ref
 
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
-		return Asset{}, err
+		return Asset{}, fmt.Errorf("file: %w", err)
 	}
 	if fileInfo.IsDir() {
 		return Asset{}, fmt.Errorf("%s is a directory", filePath)

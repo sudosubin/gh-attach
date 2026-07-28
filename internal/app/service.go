@@ -2,9 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
 	"github.com/sudosubin/gh-attach/internal/cookies"
@@ -13,7 +13,7 @@ import (
 )
 
 type Request struct {
-	FilePath        string
+	FilePaths       []string
 	Repo            string
 	Browser         string
 	Profile         string
@@ -34,19 +34,19 @@ func NewService(stderr io.Writer) *Service {
 	}
 }
 
-func (s *Service) Run(ctx context.Context, req Request) (attachments.Asset, error) {
-	if _, err := os.Stat(req.FilePath); err != nil {
-		return attachments.Asset{}, fmt.Errorf("file: %w", err)
+func (s *Service) Run(ctx context.Context, req Request) ([]attachments.Asset, error) {
+	if len(req.FilePaths) == 0 {
+		return nil, errors.New("no files to upload")
 	}
 
 	repoSpec, err := rest.ResolveRepositorySpec(req.Repo)
 	if err != nil {
-		return attachments.Asset{}, fmt.Errorf("resolve repository spec: %w", err)
+		return nil, fmt.Errorf("resolve repository spec: %w", err)
 	}
 
 	ghService, err := rest.NewService(repoSpec.Host, nil)
 	if err != nil {
-		return attachments.Asset{}, fmt.Errorf("init gh api service: %w", err)
+		return nil, fmt.Errorf("init gh api service: %w", err)
 	}
 
 	sources, err := cookies.ResolveSources(cookies.ResolveInput{
@@ -55,7 +55,7 @@ func (s *Service) Run(ctx context.Context, req Request) (attachments.Asset, erro
 		CookieStorePath: req.CookieStorePath,
 	})
 	if err != nil {
-		return attachments.Asset{}, err
+		return nil, err
 	}
 
 	repo := rest.Repository{Host: repoSpec.Host, Owner: repoSpec.Owner, Name: repoSpec.Name}
@@ -66,12 +66,12 @@ func (s *Service) Run(ctx context.Context, req Request) (attachments.Asset, erro
 	)
 	resolved, err := sessions.Resolve(ctx, repo.Host, sources)
 	if err != nil {
-		return attachments.Asset{}, err
+		return nil, err
 	}
 
 	uploader, err := attachments.NewUploader(repo.Host, resolved.Session, nil)
 	if err != nil {
-		return attachments.Asset{}, fmt.Errorf("init uploader: %w", err)
+		return nil, fmt.Errorf("init uploader: %w", err)
 	}
 
 	refererPage, err := uploader.ResolveRefererPage(
@@ -82,13 +82,32 @@ func (s *Service) Run(ctx context.Context, req Request) (attachments.Asset, erro
 		},
 	)
 	if err != nil {
-		return attachments.Asset{}, err
+		return nil, err
 	}
 
 	repositoryID, err := NewPageRepositoryIDResolver(ghService).RepositoryID(refererPage, repo.Owner, repo.Name)
 	if err != nil {
-		return attachments.Asset{}, fmt.Errorf("resolve repository: %w", err)
+		return nil, fmt.Errorf("resolve repository: %w", err)
 	}
 
-	return uploader.Upload(ctx, req.FilePath, refererPage, repositoryID)
+	return uploadFiles(req.FilePaths, func(filePath string) (attachments.Asset, error) {
+		return uploader.Upload(ctx, filePath, refererPage, repositoryID)
+	})
+}
+
+func uploadFiles(filePaths []string, upload func(string) (attachments.Asset, error)) ([]attachments.Asset, error) {
+	assets := make([]attachments.Asset, 0, len(filePaths))
+	var errs []error
+	for _, filePath := range filePaths {
+		asset, err := upload(filePath)
+		if err != nil {
+			if len(filePaths) > 1 {
+				err = fmt.Errorf("%s: %w", filePath, err)
+			}
+			errs = append(errs, err)
+			continue
+		}
+		assets = append(assets, asset)
+	}
+	return assets, errors.Join(errs...)
 }

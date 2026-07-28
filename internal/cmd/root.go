@@ -19,7 +19,7 @@ func init() {
 
 func NewCmdRoot() *cobra.Command {
 	cmd := NewCmdAttach(nil)
-	cmd.Use = "gh-attach <file>"
+	cmd.Use = "gh-attach <file>..."
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetUsageTemplate(usageTemplate)

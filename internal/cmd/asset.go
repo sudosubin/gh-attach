@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	ghjq "github.com/cli/go-gh/v2/pkg/jq"
@@ -29,28 +30,33 @@ type options struct {
 	Template    string
 }
 
-func writeAsset(w io.Writer, asset attachments.Asset, opts options) error {
+func writeAssets(w io.Writer, assets []attachments.Asset, opts options) error {
 	if !opts.JSONFlagSet {
-		_, err := fmt.Fprintln(w, asset.Href)
-		return err
+		for _, asset := range assets {
+			if _, err := fmt.Fprintln(w, asset.Href); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
-	payload := map[string]any{
-		"id":           asset.ID,
-		"name":         asset.Name,
-		"size":         asset.Size,
-		"contentType":  asset.ContentType,
-		"href":         asset.Href,
-		"originalName": asset.OriginalName,
+	payloads := make([]map[string]any, 0, len(assets))
+	for _, asset := range assets {
+		payload, err := selectFields(map[string]any{
+			"id":           asset.ID,
+			"name":         asset.Name,
+			"size":         asset.Size,
+			"contentType":  asset.ContentType,
+			"href":         asset.Href,
+			"originalName": asset.OriginalName,
+		}, opts.JSONFields)
+		if err != nil {
+			return err
+		}
+		payloads = append(payloads, payload)
 	}
 
-	selected, err := selectFields(payload, opts.JSONFields)
-	if err != nil {
-		return err
-	}
-	payload = selected
-
-	body, err := marshalOutputJSON(payload)
+	body, err := marshalOutputJSON(payloads)
 	if err != nil {
 		return err
 	}
@@ -87,9 +93,7 @@ func writeAsset(w io.Writer, asset attachments.Asset, opts options) error {
 }
 
 func availableJSONFields() []string {
-	out := make([]string, len(availableAssetFields))
-	copy(out, availableAssetFields)
-	return out
+	return slices.Clone(availableAssetFields)
 }
 
 func selectFields(payload map[string]any, fields []string) (map[string]any, error) {
