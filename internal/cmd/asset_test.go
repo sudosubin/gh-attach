@@ -53,6 +53,28 @@ func TestWriteAsset_JSONOutput(t *testing.T) {
 	}
 }
 
+func TestWriteAssets_MarkdownOutput(t *testing.T) {
+	assets := []attachments.Asset{
+		{Name: `image[1].png`, ContentType: "image/png", Href: "https://example.com/image.png"},
+		{Name: "demo.mp4", ContentType: "video/mp4", Href: "https://example.com/demo.mp4"},
+		{Name: "report.pdf", ContentType: "application/pdf", Href: "https://example.com/report.pdf"},
+		{Name: "diagram.bmp", ContentType: "image/bmp", Href: "https://example.com/diagram.bmp"},
+	}
+
+	var out bytes.Buffer
+	if err := writeAssets(&out, assets, options{Markdown: true}); err != nil {
+		t.Fatalf("writeAssets() error = %v", err)
+	}
+
+	want := "![image\\[1\\].png](https://example.com/image.png)\n" +
+		"https://example.com/demo.mp4\n" +
+		"[report.pdf](https://example.com/report.pdf)\n" +
+		"[diagram.bmp](https://example.com/diagram.bmp)\n"
+	if out.String() != want {
+		t.Fatalf("output = %q, want %q", out.String(), want)
+	}
+}
+
 func TestWriteAssets_TemplateUsesArray(t *testing.T) {
 	asset := attachments.Asset{
 		Name: "image.png",

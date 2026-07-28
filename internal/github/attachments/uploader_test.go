@@ -397,8 +397,12 @@ func TestUploadEnterpriseFlow_MediaHostGetsGHESOriginNotItsOwn(t *testing.T) {
 		Meta: refererPageMetadata{AuthenticityToken: "ghes-token"},
 	}
 
-	if _, err := u.Upload(t.Context(), tmpFile, refererPage, 1); err != nil {
+	asset, err := u.Upload(t.Context(), tmpFile, refererPage, 1)
+	if err != nil {
 		t.Fatalf("Upload() error = %v", err)
+	}
+	if asset.Name != "probe.png" || asset.ContentType != "image/png" {
+		t.Fatalf("asset metadata = (%q, %q), want local fallback metadata", asset.Name, asset.ContentType)
 	}
 
 	// media.<host> is a different host, so referer/origin are the GHES host's bare origin, not the media host's.

@@ -16,6 +16,7 @@ type AttachOptions struct {
 	Browser         string
 	Profile         string
 	CookieStorePath string
+	Markdown        bool
 	JSON            jsonFlags
 	Verbose         bool
 }
@@ -30,6 +31,7 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
 		Example: `  $ gh attach ./image.png -R owner/repo # Upload to a specific repository
   $ gh attach ./image.png ./report.pdf # Upload multiple files
   $ gh attach ./image.png --browser chrome --profile Default # Use a specific browser and profile for cookies
+  $ gh attach ./image.png --markdown # Output a Markdown reference
   $ gh attach ./image.png --json id,href,name # Output specific JSON fields`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -45,9 +47,11 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
 	cmd.Flags().StringVar(&opts.Browser, "browser", "", "Browser to use ("+cookies.BrowserChoices()+")")
 	cmd.Flags().StringVar(&opts.Profile, "profile", "", "Browser profile name")
 	cmd.Flags().StringVar(&opts.CookieStorePath, "cookie-store-path", "", "Cookie store file path")
+	cmd.Flags().BoolVar(&opts.Markdown, "markdown", false, "Output Markdown references")
 	cmd.Flags().BoolVarP(&opts.Verbose, "verbose", "v", false, "Verbose output")
 
 	addJSONFlags(cmd, &opts.JSON, availableJSONFields())
+	cmd.MarkFlagsMutuallyExclusive("markdown", "json")
 
 	return cmd
 }
@@ -68,6 +72,7 @@ func attachRun(opts *AttachOptions) error {
 	var outputErr error
 	if len(assets) > 0 {
 		outputErr = writeAssets(os.Stdout, assets, options{
+			Markdown:    opts.Markdown,
 			JSONFlagSet: opts.JSON.Enabled,
 			JSONFields:  opts.JSON.Fields,
 			JQ:          opts.JSON.Filter,
