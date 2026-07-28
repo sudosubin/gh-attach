@@ -59,7 +59,7 @@ $ gh attach ./image.png --json href,name --template '{{range .}}{{.name}} -> {{.
 image.png -> https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
 ```
 
-Multiple files are uploaded sequentially, and per-file failures do not stop the remaining uploads. With `--json`, results are always returned as an array.
+Up to two files are uploaded concurrently, and per-file failures do not stop the remaining uploads. With `--json`, results are always returned as an array.
 
 ### Options
 
