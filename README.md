@@ -36,19 +36,30 @@ gh attach ./image.png -R owner/repo
 $ gh attach ./image.png -R owner/repo
 https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
 
+$ gh attach ./image.png ./report.pdf -R owner/repo
+https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
+https://github.com/user-attachments/files/123/report.pdf
+
 $ gh attach ./image.png -R owner/repo --browser chrome --profile Default
 https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
 
 $ gh attach ./image.png --json id,href,name
-{
-  "href": "https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000",
-  "id": 123,
-  "name": "image.png"
-}
+[
+  {
+    "href": "https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000",
+    "id": 123,
+    "name": "image.png"
+  }
+]
 
-$ gh attach ./image.png --json href,name --template '{{.name}} -> {{.href}}'
+$ gh attach ./image.png --json href --jq '.[].href'
+https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
+
+$ gh attach ./image.png --json href,name --template '{{range .}}{{.name}} -> {{.href}}{{"\n"}}{{end}}'
 image.png -> https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
 ```
+
+Multiple files are uploaded sequentially, and per-file failures do not stop the remaining uploads. With `--json`, results are always returned as an array.
 
 ### Options
 
@@ -95,8 +106,8 @@ browsers:
 
 - It first resolves the target repository (`owner/repo`) and the current GitHub login via the `gh` API.
 - Based on CLI flags or config file, it looks up browser cookie sources and selects a session whose [`dotcom_user`](https://docs.github.com/en/site-policy/privacy-policies/github-cookies#cookies) matches the current login.
-- Using that session cookie, it requests GitHub upload policies (`/upload/policies/assets`) and uploads the file binary.
-- It finalizes the user-attachments asset and prints the result as a URL or formatted output via `--json`.
+- Using that session cookie, it requests GitHub upload policies (`/upload/policies/assets`) and uploads each file binary.
+- It finalizes each user-attachments asset and prints the results as URLs or formatted output via `--json`.
 
 ## Development
 
