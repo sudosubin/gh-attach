@@ -40,6 +40,10 @@ $ gh attach ./image.png ./report.pdf -R owner/repo
 https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
 https://github.com/user-attachments/files/123/report.pdf
 
+$ gh attach ./image.png ./report.pdf --markdown
+![image.png](https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000)
+[report.pdf](https://github.com/user-attachments/files/123/report.pdf)
+
 $ gh attach ./image.png -R owner/repo --browser chrome --profile Default
 https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
 
@@ -67,6 +71,7 @@ Up to two files are uploaded concurrently, and per-file failures do not stop the
 - `--browser <name>`: Browser to read cookies from (`auto|arc|atlas|brave|chrome|chromium|comet|dia|edge|firefox|floorp|helium|librewolf|opera|safari|vivaldi|waterfox|whale|zen`).
 - `--profile <name>`: Browser profile name. For Firefox-family multi-account containers, append `:<container-name>` or `:id=<container-id>` to pin a specific container (e.g. `default:Work`, `default:id=2`).
 - `--cookie-store-path <path>`: Explicit cookie DB file path.
+- `--markdown`: Output Markdown references.
 - `--json <fields>`: Output JSON with selected fields.
 - `-q, --jq <expression>`: Apply jq filter to JSON output (requires `--json`).
 - `-t, --template <go-template>`: Format JSON output using Go template (requires `--json`).

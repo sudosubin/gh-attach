@@ -1,6 +1,7 @@
 package attachments
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -144,10 +145,18 @@ func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *Ref
 	fileName := filepath.Base(filePath)
 	contentType := contentTypeForFile(fileName)
 
+	var asset Asset
 	if u.isEnterprise {
-		return u.uploadEnterpriseFlow(ctx, filePath, refererPage, repositoryID, fileName, fileInfo.Size(), contentType)
+		asset, err = u.uploadEnterpriseFlow(ctx, filePath, refererPage, repositoryID, fileName, fileInfo.Size(), contentType)
+	} else {
+		asset, err = u.uploadCloudFlow(ctx, filePath, refererPage, repositoryID, fileName, fileInfo.Size(), contentType)
 	}
-	return u.uploadCloudFlow(ctx, filePath, refererPage, repositoryID, fileName, fileInfo.Size(), contentType)
+	if err != nil {
+		return Asset{}, err
+	}
+	asset.Name = cmp.Or(asset.Name, fileName)
+	asset.ContentType = cmp.Or(asset.ContentType, contentType)
+	return asset, nil
 }
 
 func contentTypeForFile(fileName string) string {

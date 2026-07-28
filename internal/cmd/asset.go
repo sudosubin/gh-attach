@@ -24,6 +24,7 @@ var availableAssetFields = []string{
 }
 
 type options struct {
+	Markdown    bool
 	JSONFlagSet bool
 	JSONFields  []string
 	JQ          string
@@ -33,7 +34,11 @@ type options struct {
 func writeAssets(w io.Writer, assets []attachments.Asset, opts options) error {
 	if !opts.JSONFlagSet {
 		for _, asset := range assets {
-			if _, err := fmt.Fprintln(w, asset.Href); err != nil {
+			output := asset.Href
+			if opts.Markdown {
+				output = markdownForAsset(asset)
+			}
+			if _, err := fmt.Fprintln(w, output); err != nil {
 				return err
 			}
 		}
@@ -90,6 +95,24 @@ func writeAssets(w io.Writer, assets []attachments.Asset, opts options) error {
 
 	_, err = fmt.Fprintln(w, string(body))
 	return err
+}
+
+var markdownLabelEscaper = strings.NewReplacer(
+	`\`, `\\`,
+	`[`, `\[`,
+	`]`, `\]`,
+)
+
+func markdownForAsset(asset attachments.Asset) string {
+	name := markdownLabelEscaper.Replace(asset.Name)
+	switch asset.ContentType {
+	case "image/gif", "image/jpeg", "image/jpg", "image/png", "image/svg+xml", "image/webp":
+		return fmt.Sprintf("![%s](%s)", name, asset.Href)
+	case "video/mp4", "video/quicktime":
+		return asset.Href
+	default:
+		return fmt.Sprintf("[%s](%s)", name, asset.Href)
+	}
 }
 
 func availableJSONFields() []string {
