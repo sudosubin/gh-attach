@@ -1,8 +1,11 @@
 package web
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -37,6 +40,66 @@ func TestClientDoMultipart_OmitsCookiesScopedToADifferentHost(t *testing.T) {
 	}
 	if receivedUA != "test-agent" {
 		t.Fatalf("User-Agent = %q, want %q (sent regardless of cookie scoping)", receivedUA, "test-agent")
+	}
+}
+
+func TestClientDoMultipart_StreamsFileWithContentLength(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "asset.txt")
+	if err := os.WriteFile(filePath, []byte("file contents"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var contentLength int64
+	var transferEncoding []string
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	mux.HandleFunc("POST /start", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/upload", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("POST /upload", func(w http.ResponseWriter, r *http.Request) {
+		contentLength = r.ContentLength
+		transferEncoding = r.TransferEncoding
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Errorf("ParseMultipartForm() error = %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if got := r.FormValue("key"); got != "value" {
+			t.Errorf("field = %q, want %q", got, "value")
+		}
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			t.Errorf("FormFile() error = %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer func() { _ = file.Close() }()
+		got, err := io.ReadAll(file)
+		if err != nil {
+			t.Errorf("ReadAll(file) error = %v", err)
+		}
+		if string(got) != "file contents" {
+			t.Errorf("file = %q, want %q", got, "file contents")
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	c := NewClient(server.Client(), "test-agent", nil)
+	if _, err := c.DoMultipart(t.Context(), Request{
+		Method:   http.MethodPost,
+		URL:      server.URL + "/start",
+		Fields:   map[string]string{"key": "value"},
+		FilePath: filePath,
+	}); err != nil {
+		t.Fatalf("DoMultipart() error = %v", err)
+	}
+
+	if contentLength <= int64(len("file contents")) {
+		t.Fatalf("Content-Length = %d, want multipart overhead plus file size", contentLength)
+	}
+	if len(transferEncoding) != 0 {
+		t.Fatalf("Transfer-Encoding = %v, want none", transferEncoding)
 	}
 }
 

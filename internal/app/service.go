@@ -10,6 +10,7 @@ import (
 	"github.com/sudosubin/gh-attach/internal/cookies"
 	"github.com/sudosubin/gh-attach/internal/github/attachments"
 	"github.com/sudosubin/gh-attach/internal/github/rest"
+	"golang.org/x/sync/errgroup"
 )
 
 type Request struct {
@@ -95,19 +96,34 @@ func (s *Service) Run(ctx context.Context, req Request) ([]attachments.Asset, er
 	})
 }
 
+const maxConcurrentUploads = 2
+
 func uploadFiles(filePaths []string, upload func(string) (attachments.Asset, error)) ([]attachments.Asset, error) {
-	assets := make([]attachments.Asset, 0, len(filePaths))
-	var errs []error
-	for _, filePath := range filePaths {
-		asset, err := upload(filePath)
-		if err != nil {
-			if len(filePaths) > 1 {
-				err = fmt.Errorf("%s: %w", filePath, err)
+	results := make([]attachments.Asset, len(filePaths))
+	errs := make([]error, len(filePaths))
+	var uploads errgroup.Group
+	uploads.SetLimit(maxConcurrentUploads)
+	for i, filePath := range filePaths {
+		uploads.Go(func() error {
+			results[i], errs[i] = upload(filePath)
+			if errs[i] != nil && len(filePaths) > 1 {
+				errs[i] = fmt.Errorf("%s: %w", filePath, errs[i])
 			}
-			errs = append(errs, err)
+			return errs[i]
+		})
+	}
+	if err := uploads.Wait(); err == nil {
+		return results, nil
+	}
+
+	assets := make([]attachments.Asset, 0, len(filePaths))
+	var uploadErrs []error
+	for i := range filePaths {
+		if errs[i] != nil {
+			uploadErrs = append(uploadErrs, errs[i])
 			continue
 		}
-		assets = append(assets, asset)
+		assets = append(assets, results[i])
 	}
-	return assets, errors.Join(errs...)
+	return assets, errors.Join(uploadErrs...)
 }
