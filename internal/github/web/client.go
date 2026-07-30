@@ -20,6 +20,12 @@ type Client struct {
 	userAgent  string
 }
 
+// Session is the browser-compatible authentication context shared by GitHub web requests.
+type Session struct {
+	Cookies   []*http.Cookie
+	UserAgent string
+}
+
 func NewClient(httpClient *http.Client, userAgent string, cookies []*http.Cookie) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{}
