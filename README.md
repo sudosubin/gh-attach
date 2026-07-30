@@ -23,7 +23,7 @@ gh attach ./image.png -R owner/repo
 
 ## Installation
 
-Requires [GitHub CLI](https://github.com/cli/cli#installation). If you haven't authenticated yet, run `gh auth login`.
+Requires [GitHub CLI](https://github.com/cli/cli#installation). Browser-cookie mode also requires `gh auth login`. Session-token mode does not when the repository ID is available from GitHub's page.
 
 ```sh
 gh extension install sudosubin/gh-attach
@@ -45,6 +45,9 @@ $ gh attach ./image.png ./report.pdf --markdown
 [report.pdf](https://github.com/user-attachments/files/123/report.pdf)
 
 $ gh attach ./image.png -R owner/repo --browser chrome --profile Default
+https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
+
+$ GH_ATTACH_SESSION_TOKEN="$USER_SESSION" gh attach ./image.png -R owner/repo
 https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
 
 $ gh attach ./image.png --json id,href,name
@@ -71,6 +74,7 @@ Up to two files are uploaded concurrently, and per-file failures do not stop the
 - `--browser <name>`: Browser to read cookies from (`auto|arc|atlas|brave|chrome|chromium|comet|dia|edge|firefox|floorp|helium|librewolf|opera|safari|vivaldi|waterfox|whale|zen`).
 - `--profile <name>`: Browser profile name. For Firefox-family multi-account containers, append `:<container-name>` or `:id=<container-id>` to pin a specific container (e.g. `default:Work`, `default:id=2`).
 - `--cookie-store-path <path>`: Explicit cookie DB file path.
+- `--session-token <value>`: Bare `user_session` cookie value. Prefer the `GH_ATTACH_SESSION_TOKEN` environment variable to keep this account credential out of command history and process arguments. Explicit browser options override the environment variable.
 - `--markdown`: Output Markdown references.
 - `--json <fields>`: Output JSON with selected fields.
 - `-q, --jq <expression>`: Apply jq filter to JSON output (requires `--json`).
@@ -109,8 +113,9 @@ browsers:
 
 ## How It Works
 
-- It first resolves the target repository (`owner/repo`) and the current GitHub login via the `gh` API.
-- Based on CLI flags or config file, it looks up browser cookie sources and selects a session whose [`dotcom_user`](https://docs.github.com/en/site-policy/privacy-policies/github-cookies#cookies) matches the current login.
+- It first resolves the target repository (`owner/repo`).
+- With browser-cookie mode, it resolves the current GitHub login via the `gh` API and selects a browser session whose [`dotcom_user`](https://docs.github.com/en/site-policy/privacy-policies/github-cookies#cookies) matches it.
+- With `--session-token` or `GH_ATTACH_SESSION_TOKEN`, it uses the supplied bare `user_session` value without reading a browser.
 - Using that session cookie, it requests GitHub upload policies (`/upload/policies/assets`) and uploads each file binary.
 - It finalizes each user-attachments asset and prints the results as URLs or formatted output via `--json`.
 

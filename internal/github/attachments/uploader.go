@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/auth"
-	"github.com/sudosubin/gh-attach/internal/browserprovider"
 	"github.com/sudosubin/gh-attach/internal/github/web"
 )
 
@@ -98,7 +97,7 @@ var contentTypesByExtension = map[string]string{
 	".zip":        "application/zip",
 }
 
-func NewUploader(host string, session browserprovider.BrowserSession, client *http.Client) (*Uploader, error) {
+func NewUploader(host string, session web.Session, client *http.Client) (*Uploader, error) {
 	return &Uploader{
 		baseURL:      "https://" + host,
 		client:       web.NewClient(client, session.UserAgent, session.Cookies),

@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/sudosubin/gh-attach/internal/app"
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
+
+const sessionTokenEnv = "GH_ATTACH_SESSION_TOKEN"
 
 type AttachOptions struct {
 	FilePaths       []string
@@ -16,6 +19,7 @@ type AttachOptions struct {
 	Browser         string
 	Profile         string
 	CookieStorePath string
+	SessionToken    string
 	Markdown        bool
 	JSON            jsonFlags
 	Verbose         bool
@@ -34,8 +38,13 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
   $ gh attach ./image.png --markdown # Output a Markdown reference
   $ gh attach ./image.png --json id,href,name # Output specific JSON fields`,
 		Args: cobra.MinimumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.FilePaths = args
+			var err error
+			opts.SessionToken, err = sessionToken(cmd, opts.SessionToken)
+			if err != nil {
+				return err
+			}
 			if runF != nil {
 				return runF(opts)
 			}
@@ -47,13 +56,37 @@ func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
 	cmd.Flags().StringVar(&opts.Browser, "browser", "", "Browser to use ("+cookies.BrowserChoices()+")")
 	cmd.Flags().StringVar(&opts.Profile, "profile", "", "Browser profile name")
 	cmd.Flags().StringVar(&opts.CookieStorePath, "cookie-store-path", "", "Cookie store file path")
+	cmd.Flags().StringVar(&opts.SessionToken, "session-token", "", "GitHub user_session cookie value")
 	cmd.Flags().BoolVar(&opts.Markdown, "markdown", false, "Output Markdown references")
 	cmd.Flags().BoolVarP(&opts.Verbose, "verbose", "v", false, "Verbose output")
 
 	addJSONFlags(cmd, &opts.JSON, availableJSONFields())
 	cmd.MarkFlagsMutuallyExclusive("markdown", "json")
+	for _, name := range []string{"browser", "profile", "cookie-store-path"} {
+		cmd.MarkFlagsMutuallyExclusive("session-token", name)
+	}
 
 	return cmd
+}
+
+func sessionToken(cmd *cobra.Command, flagValue string) (string, error) {
+	value, ok := flagValue, cmd.Flags().Changed("session-token")
+	if !ok {
+		for _, name := range []string{"browser", "profile", "cookie-store-path"} {
+			if cmd.Flags().Changed(name) {
+				return "", nil
+			}
+		}
+		value, ok = os.LookupEnv(sessionTokenEnv)
+	}
+	if !ok {
+		return "", nil
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", errors.New("session token is empty")
+	}
+	return value, nil
 }
 
 func attachRun(opts *AttachOptions) error {
@@ -66,6 +99,7 @@ func attachRun(opts *AttachOptions) error {
 		Browser:         opts.Browser,
 		Profile:         opts.Profile,
 		CookieStorePath: opts.CookieStorePath,
+		SessionToken:    opts.SessionToken,
 		Verbose:         opts.Verbose,
 	})
 
