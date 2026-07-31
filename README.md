@@ -140,7 +140,6 @@ browsers:
 - Using that session cookie, it requests GitHub upload policies (`/upload/policies/assets`) and uploads each file binary.
 - It finalizes each user-attachments asset and prints the results as URLs or formatted output via `--json`.
 - Downloads prefer an explicit authentication source, then the active `gh` token, then matching browser cookies.
-- Download responses are streamed to a temporary file and moved into place only after completion.
 
 ## Development
 

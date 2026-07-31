@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/sudosubin/gh-attach/internal/app"
@@ -84,14 +83,10 @@ func downloadRun(opts *DownloadOptions) error {
 	return writeDownload(body, opts.Output, opts.Clobber, os.Stdout)
 }
 
-func errAlreadyExists(output string) error {
-	return fmt.Errorf("%s already exists (use `--clobber` to overwrite)", output)
-}
-
 func checkOutput(output string, clobber bool) error {
 	if output != "-" && !clobber {
 		if _, err := os.Stat(output); err == nil {
-			return errAlreadyExists(output)
+			return fmt.Errorf("%s already exists (use `--clobber` to overwrite)", output)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -108,37 +103,13 @@ func writeDownload(src io.Reader, output string, clobber bool, stdout io.Writer)
 		return err
 	}
 
-	dir := filepath.Dir(output)
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(output)+".*")
+	f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}
-	tmpPath := tmp.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
-
-	// os.CreateTemp uses 0600; downloads are ordinary files, 0644 like gh's.
-	if err := tmp.Chmod(0o644); err != nil {
-		_ = tmp.Close()
-		return err
+	_, err = io.Copy(f, src)
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
 	}
-	if _, err := io.Copy(tmp, src); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-
-	if !clobber {
-		// O_EXCL claims the name atomically; the rename below replaces only our reservation.
-		reserved, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if errors.Is(err, os.ErrExist) {
-			return errAlreadyExists(output)
-		}
-		if err != nil {
-			return err
-		}
-		_ = reserved.Close()
-	}
-	return os.Rename(tmpPath, output)
+	return err
 }

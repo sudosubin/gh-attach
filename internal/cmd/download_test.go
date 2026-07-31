@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -153,9 +151,6 @@ func TestWriteDownload(t *testing.T) {
 		if string(got) != "contents" {
 			t.Fatalf("file = %q", got)
 		}
-		if info, err := os.Stat(path); runtime.GOOS != "windows" && (err != nil || info.Mode().Perm() != 0o644) {
-			t.Fatalf("mode = %v, %v, want 0644", info.Mode(), err)
-		}
 	})
 
 	t.Run("stdout", func(t *testing.T) {
@@ -217,35 +212,4 @@ func TestWriteDownload(t *testing.T) {
 			t.Fatalf("file = %q, want replacement", got)
 		}
 	})
-
-	t.Run("removes partial file", func(t *testing.T) {
-		// given
-		dir := t.TempDir()
-		path := filepath.Join(dir, "asset.txt")
-		src := io.MultiReader(strings.NewReader("partial"), errorReader{})
-
-		// when
-		err := writeDownload(src, path, false, io.Discard)
-
-		// then
-		if err == nil {
-			t.Fatal("writeDownload() error = nil")
-		}
-		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("output file exists after failure: %v", err)
-		}
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(entries) != 0 {
-			t.Fatalf("temporary files remain: %v", entries)
-		}
-	})
-}
-
-type errorReader struct{}
-
-func (errorReader) Read([]byte) (int, error) {
-	return 0, errors.New("read failed")
 }
