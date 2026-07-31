@@ -19,14 +19,17 @@ func TestScopedCookieJar_DeduplicatesKeysLastWins(t *testing.T) {
 	}
 }
 
-func TestScopedCookieJar_ExcludesSiblingSubdomain(t *testing.T) {
+func TestScopedCookieJar_ScopesToDomainAndSubdomains(t *testing.T) {
 	t.Parallel()
 
 	jar := newScopedCookieJar([]*http.Cookie{
 		{Name: "user_session", Value: "abc", Domain: "github.test", Path: "/"},
 	})
-	if got := jar.Cookies(mustURL(t, "https://media.github.test/user/1/files")); len(got) != 0 {
-		t.Fatalf("cookies = %+v, want none", got)
+	if got := jar.Cookies(mustURL(t, "https://media.github.test/user/1/files")); len(got) != 1 {
+		t.Fatalf("cookies = %+v, want user_session for subdomain", got)
+	}
+	if got := jar.Cookies(mustURL(t, "https://evilgithub.test/user/1/files")); len(got) != 0 {
+		t.Fatalf("cookies = %+v, want none for unrelated host", got)
 	}
 }
 

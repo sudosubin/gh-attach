@@ -26,10 +26,20 @@ type AttachOptions struct {
 }
 
 func NewCmdAttach(runF func(*AttachOptions) error) *cobra.Command {
+	return newCmdUpload("<file>...", runF)
+}
+
+func NewCmdUpload(runF func(*AttachOptions) error) *cobra.Command {
+	cmd := newCmdUpload("upload <file>...", runF)
+	cmd.Example = strings.ReplaceAll(cmd.Example, "gh attach ", "gh attach upload ")
+	return cmd
+}
+
+func newCmdUpload(use string, runF func(*AttachOptions) error) *cobra.Command {
 	opts := &AttachOptions{}
 
 	cmd := &cobra.Command{
-		Use:   "<file>...",
+		Use:   use,
 		Short: "Upload files to GitHub user-attachments",
 		Long:  "Upload files to GitHub user-attachments.",
 		Example: `  $ gh attach ./image.png -R owner/repo # Upload to a specific repository

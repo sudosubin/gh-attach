@@ -6,7 +6,7 @@
 [![license](https://badgen.net/github/license/sudosubin/gh-attach?color=green)](./LICENSE)
 [![downloads](https://img.shields.io/github/downloads/sudosubin/gh-attach/total?color=green)](https://github.com/sudosubin/gh-attach/releases)
 
-A GitHub CLI extension that uploads files to GitHub attachments.
+A GitHub CLI extension that uploads and downloads GitHub attachments.
 
 <a href="docs/assets/gh-attach-demo.webp">
   <img src="docs/assets/gh-attach-demo.webp" alt="gh-attach demo" width="800" />
@@ -34,6 +34,9 @@ gh attach ./image.png -R owner/repo
 
 ```sh
 $ gh attach ./image.png -R owner/repo
+https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
+
+$ gh attach upload ./image.png -R owner/repo
 https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000
 
 $ gh attach ./image.png ./report.pdf -R owner/repo
@@ -68,7 +71,17 @@ image.png -> https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-
 
 Up to two files are uploaded concurrently, and per-file failures do not stop the remaining uploads. With `--json`, results are always returned as an array.
 
-### Options
+### Download
+
+```sh
+$ gh attach download https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000 -O image.png
+
+$ gh attach download https://github.com/user-attachments/files/123/report.pdf -O -
+```
+
+Downloads use an explicit session token or browser selection first. Otherwise they use the active `gh` authentication token and retry with the matching browser cookies after an authorization failure.
+
+### Upload options
 
 - `-R, --repo <[HOST/]OWNER/REPO>`: Target repository. Auto detection is available from current repository.
 - `--browser <name>`: Browser to read cookies from (`auto|arc|atlas|brave|chrome|chromium|comet|dia|edge|firefox|floorp|helium|librewolf|opera|safari|vivaldi|waterfox|whale|zen`).
@@ -79,6 +92,14 @@ Up to two files are uploaded concurrently, and per-file failures do not stop the
 - `--json <fields>`: Output JSON with selected fields.
 - `-q, --jq <expression>`: Apply jq filter to JSON output (requires `--json`).
 - `-t, --template <go-template>`: Format JSON output using Go template (requires `--json`).
+- `-v, --verbose`: Print cookie source resolution logs to stderr.
+- `-h, --help`: Show help.
+
+### Download options
+
+- `-O, --output <file>`: File to write to. Use `-` for standard output.
+- `--clobber`: Overwrite an existing file.
+- `--browser`, `--profile`, `--cookie-store-path`, `--session-token`: Select the same authentication sources as upload.
 - `-v, --verbose`: Print cookie source resolution logs to stderr.
 - `-h, --help`: Show help.
 
@@ -118,6 +139,7 @@ browsers:
 - With `--session-token` or `GH_ATTACH_SESSION_TOKEN`, it uses the supplied bare `user_session` value without reading a browser.
 - Using that session cookie, it requests GitHub upload policies (`/upload/policies/assets`) and uploads each file binary.
 - It finalizes each user-attachments asset and prints the results as URLs or formatted output via `--json`.
+- Downloads prefer an explicit authentication source, then the active `gh` token, then matching browser cookies.
 
 ## Development
 

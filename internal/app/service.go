@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
 	"github.com/sudosubin/gh-attach/internal/cookies"
@@ -24,10 +25,12 @@ type Request struct {
 	Verbose         bool
 }
 
-// Service orchestrates the GitHub user-attachment upload flow.
+// Service orchestrates GitHub user-attachment flows.
 type Service struct {
-	providers map[cookies.Browser]browserprovider.BrowserProvider
-	stderr    io.Writer
+	providers     map[cookies.Browser]browserprovider.BrowserProvider
+	stderr        io.Writer
+	httpClient    *http.Client
+	loginResolver LoginResolver
 }
 
 func NewService(stderr io.Writer) *Service {
@@ -47,50 +50,19 @@ func (s *Service) Run(ctx context.Context, req Request) ([]attachments.Asset, er
 		return nil, fmt.Errorf("resolve repository spec: %w", err)
 	}
 
-	var ghService *rest.Service
-	getGHService := func() (*rest.Service, error) {
-		if ghService != nil {
-			return ghService, nil
-		}
-		service, err := rest.NewService(repoSpec.Host, nil)
-		if err != nil {
-			return nil, fmt.Errorf("init gh api service: %w", err)
-		}
-		ghService = service
-		return ghService, nil
-	}
-
 	repo := rest.Repository{Host: repoSpec.Host, Owner: repoSpec.Owner, Name: repoSpec.Name}
 	var session web.Session
 	if req.SessionToken != "" {
 		session, err = newTokenSession(repo.Host, req.SessionToken)
-		if err != nil {
-			return nil, err
-		}
 	} else {
-		sources, resolveErr := cookies.ResolveSources(cookies.ResolveInput{
+		session, err = s.resolveBrowserSession(ctx, repo.Host, cookies.ResolveInput{
 			Browser:         req.Browser,
 			Profile:         req.Profile,
 			CookieStorePath: req.CookieStorePath,
-		})
-		if resolveErr != nil {
-			return nil, resolveErr
-		}
-		api, apiErr := getGHService()
-		if apiErr != nil {
-			return nil, apiErr
-		}
-		resolved, resolveErr := NewSessionResolver(
-			NewConfigLoginResolver(api),
-			NewCookieResolver(s.providers, req.Verbose, s.stderr),
-		).Resolve(ctx, repo.Host, sources)
-		if resolveErr != nil {
-			return nil, resolveErr
-		}
-		session = web.Session{
-			Cookies:   resolved.Session.Cookies,
-			UserAgent: resolved.Session.UserAgent,
-		}
+		}, req.Verbose)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	uploader, err := attachments.NewUploader(repo.Host, session, nil)
@@ -111,9 +83,9 @@ func (s *Service) Run(ctx context.Context, req Request) ([]attachments.Asset, er
 
 	repositoryID := refererPage.Meta.RepositoryID
 	if repositoryID == 0 {
-		api, apiErr := getGHService()
+		api, apiErr := rest.NewService(repo.Host, nil)
 		if apiErr != nil {
-			return nil, apiErr
+			return nil, fmt.Errorf("init gh api service: %w", apiErr)
 		}
 		repositoryID, err = NewPageRepositoryIDResolver(api).RepositoryID(refererPage, repo.Owner, repo.Name)
 		if err != nil {

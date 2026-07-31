@@ -20,9 +20,13 @@ func init() {
 func NewCmdRoot() *cobra.Command {
 	cmd := NewCmdAttach(nil)
 	cmd.Use = "gh-attach <file>..."
+	cmd.Short = "Upload and download GitHub user-attachments"
+	cmd.Long = "Upload and download GitHub user-attachments."
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetUsageTemplate(usageTemplate)
+	cmd.CompletionOptions.DisableDefaultCmd = true
+	cmd.AddCommand(NewCmdUpload(nil), NewCmdDownload(nil))
 	return cmd
 }
 
@@ -33,7 +37,10 @@ FLAGS
 {{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
 
 INHERITED FLAGS
-{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if index .Annotations "help:json-fields"}}
+{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableSubCommands}}
+
+COMMANDS{{range .Commands}}{{if .IsAvailableCommand}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if index .Annotations "help:json-fields"}}
 
 JSON FIELDS
 {{jsonFields .}}{{end}}{{if .HasExample}}
