@@ -1,6 +1,6 @@
 ---
 name: gh-attach
-description: Uploads a local file (screenshot, image, PDF, zip, video) to GitHub user-attachments and embeds it in a PR, issue, or comment. Use when asked to "attach a screenshot to the PR", "add an image to the issue", "embed before/after screenshots", or "attach this file". Powered by `gh-attach`.
+description: Uploads a local file (screenshot, image, PDF, zip, video) to GitHub user-attachments, downloads GitHub user-attachments, and embeds local files in a PR, issue, or comment. Use when asked to "attach a screenshot to the PR", "add an image to the issue", "embed before/after screenshots", "attach this file", or "download this GitHub attachment". Powered by `gh-attach`.
 license: MIT
 ---
 
@@ -28,6 +28,12 @@ URL=$(gh attach "$FILE" -R <owner>/<repo>)
 
 ```sh
 printf '## Screenshots\n\n%s\n' "$URL" | gh pr comment <pr> -R <owner>/<repo> --body-file -
+```
+
+**3. Download**: Specify the destination explicitly. Private attachments use the active `gh` token, with browser cookies as an authorization fallback:
+
+```sh
+gh attach download "$URL" -O "$FILE"
 ```
 
 ## Notes

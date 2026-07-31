@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
 	"github.com/sudosubin/gh-attach/internal/cookies"
@@ -24,10 +25,12 @@ type Request struct {
 	Verbose         bool
 }
 
-// Service orchestrates the GitHub user-attachment upload flow.
+// Service orchestrates GitHub user-attachment flows.
 type Service struct {
-	providers map[cookies.Browser]browserprovider.BrowserProvider
-	stderr    io.Writer
+	providers     map[cookies.Browser]browserprovider.BrowserProvider
+	stderr        io.Writer
+	httpClient    *http.Client
+	loginResolver LoginResolver
 }
 
 func NewService(stderr io.Writer) *Service {

@@ -49,6 +49,11 @@ type Request struct {
 	Referer  string // non-empty applies setDefaultHeaders(req, referer)
 }
 
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	req.Header.Set("User-Agent", c.userAgent)
+	return c.httpClient.Do(req)
+}
+
 type multipartPayload struct {
 	data          []byte
 	filePath      string
@@ -106,9 +111,7 @@ func (c *Client) DoMultipart(ctx context.Context, req Request) ([]byte, error) {
 		httpReq.Header.Set(k, v)
 	}
 	httpReq.Header.Set("Content-Type", payload.contentType)
-	httpReq.Header.Set("User-Agent", c.userAgent)
-
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -164,9 +167,7 @@ func (c *Client) Get(ctx context.Context, pageURL string) (body []byte, statusCo
 	if err := setDefaultHeaders(req, pageURL); err != nil {
 		return nil, 0, err
 	}
-	req.Header.Set("User-Agent", c.userAgent)
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}
