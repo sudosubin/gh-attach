@@ -5,6 +5,7 @@
 [![version](https://badgen.net/github/release/sudosubin/gh-attach?label=version)](https://github.com/sudosubin/gh-attach/releases)
 [![license](https://badgen.net/github/license/sudosubin/gh-attach?color=green)](./LICENSE)
 [![downloads](https://img.shields.io/github/downloads/sudosubin/gh-attach/total?color=green)](https://github.com/sudosubin/gh-attach/releases)
+[![skills.sh](https://skills.sh/b/sudosubin/gh-attach)](https://skills.sh/sudosubin/gh-attach)
 
 A GitHub CLI extension that uploads and downloads GitHub attachments.
 
@@ -80,6 +81,18 @@ $ gh attach download https://github.com/user-attachments/files/123/report.pdf -O
 ```
 
 Downloads use an explicit session token or browser selection first. Otherwise they use the active `gh` authentication token and retry with the matching browser cookies after an authorization failure.
+
+## Use with AI agents
+
+`gh-attach` ships as an [agent skill](https://agentskills.io), so AI coding agents can attach screenshots or files to a PR or issue, embed them as Markdown, and download `user-attachments` URLs from a natural-language request like *"attach this screenshot to the PR"*.
+
+```sh
+npx skills add sudosubin/gh-attach
+```
+
+The [Agent Skills standard](https://agentskills.io/clients) is supported by Claude Code, OpenAI Codex, Cursor, GitHub Copilot, and more.
+
+## Options
 
 ### Upload options
 
