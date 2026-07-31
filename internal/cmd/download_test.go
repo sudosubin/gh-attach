@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -135,6 +136,28 @@ func TestNewCmdDownload_RequiresOutput(t *testing.T) {
 }
 
 func TestWriteDownload(t *testing.T) {
+	t.Run("writes new file", func(t *testing.T) {
+		// given
+		path := filepath.Join(t.TempDir(), "asset.txt")
+
+		// when
+		err := writeDownload(strings.NewReader("contents"), path, false, io.Discard)
+		// then
+		if err != nil {
+			t.Fatalf("writeDownload() error = %v", err)
+		}
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "contents" {
+			t.Fatalf("file = %q", got)
+		}
+		if info, err := os.Stat(path); runtime.GOOS != "windows" && (err != nil || info.Mode().Perm() != 0o644) {
+			t.Fatalf("mode = %v, %v, want 0644", info.Mode(), err)
+		}
+	})
+
 	t.Run("stdout", func(t *testing.T) {
 		// given
 		var out bytes.Buffer

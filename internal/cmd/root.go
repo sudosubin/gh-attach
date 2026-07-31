@@ -39,9 +39,8 @@ FLAGS
 INHERITED FLAGS
 {{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableSubCommands}}
 
-COMMANDS
-{{range .Commands}}{{if .IsAvailableCommand}}  {{rpad .Name .NamePadding }} {{.Short}}
-{{end}}{{end}}{{end}}{{if index .Annotations "help:json-fields"}}
+COMMANDS{{range .Commands}}{{if .IsAvailableCommand}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if index .Annotations "help:json-fields"}}
 
 JSON FIELDS
 {{jsonFields .}}{{end}}{{if .HasExample}}

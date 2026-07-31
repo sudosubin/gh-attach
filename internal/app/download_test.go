@@ -16,6 +16,8 @@ import (
 
 func TestParseAttachmentURL(t *testing.T) {
 	// given
+	t.Setenv("GH_HOST", "ghe.example.com")
+
 	tests := []struct {
 		name    string
 		url     string
@@ -28,6 +30,25 @@ func TestParseAttachmentURL(t *testing.T) {
 		{
 			name: "cloud file",
 			url:  "https://github.com/user-attachments/files/123/report.pdf",
+		},
+		{
+			name: "ghes subdomain isolation",
+			url:  "https://media.ghe.example.com/user-attachments/assets/id",
+		},
+		{
+			name:    "unconfigured port on known host",
+			url:     "https://ghe.example.com:8443/user-attachments/assets/id",
+			wantErr: true,
+		},
+		{
+			name:    "query string",
+			url:     "https://github.com/user-attachments/assets/id?download=1",
+			wantErr: true,
+		},
+		{
+			name:    "trailing slash",
+			url:     "https://github.com/user-attachments/files/123/report.pdf/",
+			wantErr: true,
 		},
 		{
 			name:    "unknown host",
@@ -74,8 +95,7 @@ func TestServiceDownload_ExplicitSessionTokenPrecedesBearer(t *testing.T) {
 	}))
 	defer server.Close()
 
-	host := mustDownloadHost(t, server.URL)
-	t.Setenv("GH_HOST", host)
+	t.Setenv("GH_HOST", mustServerURL(t, server.URL).Host)
 	t.Setenv("GH_ENTERPRISE_TOKEN", "gh-token")
 
 	svc := NewService(io.Discard)
@@ -120,8 +140,8 @@ func TestServiceDownload_BearerFallsBackToBrowserCookies(t *testing.T) {
 	}))
 	defer server.Close()
 
-	host := mustDownloadHost(t, server.URL)
-	configureDownloadTestAuth(t, host)
+	serverURL := mustServerURL(t, server.URL)
+	configureDownloadTestAuth(t, serverURL.Host)
 
 	svc := NewService(io.Discard)
 	svc.httpClient = server.Client()
@@ -133,8 +153,8 @@ func TestServiceDownload_BearerFallsBackToBrowserCookies(t *testing.T) {
 				Browser: cookies.BrowserFirefox,
 				Profile: "default",
 				Cookies: []*http.Cookie{
-					{Name: "dotcom_user", Value: "octocat", Domain: host, Path: "/", Secure: true},
-					{Name: "user_session", Value: "browser-token", Domain: host, Path: "/", Secure: true},
+					{Name: "dotcom_user", Value: "octocat", Domain: serverURL.Hostname(), Path: "/", Secure: true},
+					{Name: "user_session", Value: "browser-token", Domain: serverURL.Hostname(), Path: "/", Secure: true},
 				},
 				UserAgent: "firefox",
 			}},
@@ -166,15 +186,15 @@ func TestServiceDownload_BearerFallsBackToBrowserCookies(t *testing.T) {
 	}
 
 	// when
-	body, err = svc.Download(t.Context(), DownloadRequest{
+	fallback, err := svc.Download(t.Context(), DownloadRequest{
 		URL: server.URL + "/user-attachments/assets/id",
 	})
 	// then
 	if err != nil {
 		t.Fatalf("Download() with fallback error = %v", err)
 	}
-	defer func() { _ = body.Close() }()
-	if _, err := io.ReadAll(body); err != nil {
+	defer func() { _ = fallback.Close() }()
+	if _, err := io.ReadAll(fallback); err != nil {
 		t.Fatal(err)
 	}
 	if bearerRequests != 1 || cookieRequests != 2 {
@@ -200,8 +220,7 @@ func TestServiceDownload_StripsAuthenticationAfterRedirect(t *testing.T) {
 	}))
 	defer entryServer.Close()
 
-	host := mustDownloadHost(t, entryServer.URL)
-	t.Setenv("GH_HOST", host)
+	t.Setenv("GH_HOST", mustServerURL(t, entryServer.URL).Host)
 	t.Setenv("GH_ENTERPRISE_TOKEN", "gh-token")
 
 	client := entryServer.Client()
@@ -249,13 +268,13 @@ func (t *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return http.DefaultTransport.RoundTrip(req)
 }
 
-func mustDownloadHost(t *testing.T, rawURL string) string {
+func mustServerURL(t *testing.T, rawURL string) *url.URL {
 	t.Helper()
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return parsed.Hostname()
+	return parsed
 }
 
 func configureDownloadTestAuth(t *testing.T, host string) {

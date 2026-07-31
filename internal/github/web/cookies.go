@@ -29,15 +29,26 @@ func newScopedCookieJar(cookies []*http.Cookie) http.CookieJar {
 	return scoped
 }
 
+// allows permits cookie hosts and their subdomains (GHES subdomain isolation); the inner jar still domain-matches per cookie.
+func (j *scopedCookieJar) allows(u *url.URL) bool {
+	host := strings.ToLower(u.Hostname())
+	for allowed := range j.hosts {
+		if host == allowed || strings.HasSuffix(host, "."+allowed) {
+			return true
+		}
+	}
+	return false
+}
+
 func (j *scopedCookieJar) Cookies(u *url.URL) []*http.Cookie {
-	if _, ok := j.hosts[strings.ToLower(u.Hostname())]; !ok {
+	if !j.allows(u) {
 		return nil
 	}
 	return j.jar.Cookies(u)
 }
 
 func (j *scopedCookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
-	if _, ok := j.hosts[strings.ToLower(u.Hostname())]; ok {
+	if j.allows(u) {
 		j.jar.SetCookies(u, cookies)
 	}
 }

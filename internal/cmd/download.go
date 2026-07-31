@@ -84,10 +84,14 @@ func downloadRun(opts *DownloadOptions) error {
 	return writeDownload(body, opts.Output, opts.Clobber, os.Stdout)
 }
 
+func errAlreadyExists(output string) error {
+	return fmt.Errorf("%s already exists (use `--clobber` to overwrite)", output)
+}
+
 func checkOutput(output string, clobber bool) error {
 	if output != "-" && !clobber {
 		if _, err := os.Stat(output); err == nil {
-			return fmt.Errorf("%s already exists", output)
+			return errAlreadyExists(output)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -112,6 +116,11 @@ func writeDownload(src io.Reader, output string, clobber bool, stdout io.Writer)
 	tmpPath := tmp.Name()
 	defer func() { _ = os.Remove(tmpPath) }()
 
+	// os.CreateTemp uses 0600; downloads are ordinary files, 0644 like gh's.
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return err
+	}
 	if _, err := io.Copy(tmp, src); err != nil {
 		_ = tmp.Close()
 		return err
@@ -121,14 +130,15 @@ func writeDownload(src io.Reader, output string, clobber bool, stdout io.Writer)
 	}
 
 	if !clobber {
-		if err := os.Link(tmpPath, output); err != nil {
-			if errors.Is(err, os.ErrExist) {
-				return fmt.Errorf("%s already exists", output)
-			}
+		// O_EXCL claims the name atomically; the rename below replaces only our reservation.
+		reserved, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, os.ErrExist) {
+			return errAlreadyExists(output)
+		}
+		if err != nil {
 			return err
 		}
-		return nil
+		_ = reserved.Close()
 	}
-
 	return os.Rename(tmpPath, output)
 }
