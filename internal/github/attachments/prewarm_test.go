@@ -17,7 +17,7 @@ func stubLookup(block <-chan struct{}) (lookup hostLookupFunc, snapshot func() [
 	var mu sync.Mutex
 	var called []string
 
-	lookup = func(ctx context.Context, host string) ([]string, error) {
+	lookup = func(_ context.Context, host string) ([]string, error) {
 		mu.Lock()
 		called = append(called, host)
 		mu.Unlock()
