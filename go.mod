@@ -4,6 +4,7 @@ go 1.25.12
 
 require (
 	github.com/cli/go-gh/v2 v2.13.0
+	github.com/cli/safeexec v1.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/steipete/sweetcookie v0.0.2-0.20260619180219-b3c7c0383e44
@@ -22,7 +23,6 @@ require (
 	github.com/charmbracelet/x/ansi v0.8.0 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
-	github.com/cli/safeexec v1.0.0 // indirect
 	github.com/cli/shurcooL-graphql v0.0.4 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
