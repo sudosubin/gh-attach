@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
@@ -42,10 +43,31 @@ func NewSessionResolver(logins LoginResolver, cookies *CookieResolver) *SessionR
 	return &SessionResolver{logins: logins, cookies: cookies}
 }
 
+// Resolve starts login resolution in the background: it and cookie loading
+// are independent until a candidate browser session's dotcom_user actually
+// needs to be compared against the resolved login, so there's no reason for
+// cookie loading to wait for login to finish first. The two only rendezvous
+// (via the ghLogin thunk passed to CookieResolver.Resolve) at that point,
+// and not at all if no session ever has a dotcom_user to check.
 func (s *SessionResolver) Resolve(ctx context.Context, host string, sources []cookies.Source) (ResolvedCookies, error) {
-	login, err := s.logins.Login(host)
-	if err != nil {
-		return ResolvedCookies{}, fmt.Errorf("resolve current login: %w", err)
+	type loginResult struct {
+		login string
+		err   error
 	}
-	return s.cookies.Resolve(ctx, host, login, sources)
+
+	loginCh := make(chan loginResult, 1)
+	go func() {
+		login, err := s.logins.Login(host)
+		loginCh <- loginResult{login, err}
+	}()
+
+	ghLogin := sync.OnceValues(func() (string, error) {
+		r := <-loginCh
+		if r.err != nil {
+			return "", fmt.Errorf("resolve current login: %w", r.err)
+		}
+		return r.login, nil
+	})
+
+	return s.cookies.Resolve(ctx, host, ghLogin, sources)
 }

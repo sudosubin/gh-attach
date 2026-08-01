@@ -12,7 +12,6 @@ import (
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/sudosubin/gh-attach/internal/cookies"
-	"github.com/sudosubin/gh-attach/internal/github/rest"
 	"github.com/sudosubin/gh-attach/internal/github/web"
 )
 
@@ -136,11 +135,9 @@ func (s *Service) resolveBrowserSession(
 	}
 	loginResolver := s.loginResolver
 	if loginResolver == nil {
-		apiService, apiErr := rest.NewService(host, nil)
-		if apiErr != nil {
-			return web.Session{}, fmt.Errorf("init gh api service: %w", apiErr)
-		}
-		loginResolver = NewConfigLoginResolver(apiService)
+		// rest.NewService is only actually built inside lazyAPILoginResolver,
+		// once Login() finds no local token to resolve from directly.
+		loginResolver = NewConfigLoginResolver(lazyAPILoginResolver{host: host})
 	}
 	resolved, err := NewSessionResolver(
 		loginResolver,

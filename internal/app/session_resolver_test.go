@@ -1,9 +1,12 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
 	"github.com/sudosubin/gh-attach/internal/cookies"
@@ -87,5 +90,92 @@ func TestSessionResolver_PropagatesLoginError(t *testing.T) {
 
 	if _, err := sr.Resolve(t.Context(), "github.com", nil); err == nil {
 		t.Fatalf("Resolve() error = nil, want non-nil")
+	}
+}
+
+// blockingLoginResolver.Login doesn't return until gate is closed, letting
+// a test observe what happens while login resolution is still in flight.
+type blockingLoginResolver struct {
+	gate  <-chan struct{}
+	login string
+}
+
+func (r blockingLoginResolver) Login(string) (string, error) {
+	<-r.gate
+	return r.login, nil
+}
+
+// gatedProvider signals started (best-effort, non-blocking) the moment
+// Load runs, so a test can observe exactly when cookie loading began.
+type gatedProvider struct {
+	started  chan<- struct{}
+	sessions []browserprovider.BrowserSession
+}
+
+func (p gatedProvider) Browser() cookies.Browser { return cookies.BrowserChromium }
+func (p gatedProvider) BackendName() string      { return "sweetcookie" }
+
+func (p gatedProvider) Load(context.Context, string, cookies.Source) ([]browserprovider.BrowserSession, error) {
+	select {
+	case p.started <- struct{}{}:
+	default:
+	}
+	return p.sessions, nil
+}
+
+// TestSessionResolver_CookieLoadingOverlapsLogin proves the two run
+// concurrently rather than cookie loading waiting on login to finish
+// first: it holds login blocked, confirms cookie loading has already
+// started, and only then releases login.
+func TestSessionResolver_CookieLoadingOverlapsLogin(t *testing.T) {
+	loginGate := make(chan struct{})
+	releaseLogin := sync.OnceFunc(func() { close(loginGate) })
+	defer releaseLogin() // safety net if the test fails before the deliberate release below
+
+	loadStarted := make(chan struct{}, 1)
+	providers := map[cookies.Browser]browserprovider.BrowserProvider{
+		cookies.BrowserChromium: gatedProvider{
+			started: loadStarted,
+			sessions: []browserprovider.BrowserSession{{
+				Browser: cookies.BrowserChromium,
+				Cookies: []*http.Cookie{{Name: "dotcom_user", Value: "sudosubin"}},
+			}},
+		},
+	}
+
+	sr := NewSessionResolver(
+		blockingLoginResolver{gate: loginGate, login: "sudosubin"},
+		NewCookieResolver(providers, false, nil),
+	)
+
+	resultCh := make(chan ResolvedCookies, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		resolved, err := sr.Resolve(t.Context(), "github.com", []cookies.Source{{Browser: cookies.BrowserChromium}})
+		resultCh <- resolved
+		errCh <- err
+	}()
+
+	select {
+	case <-loadStarted:
+		// Cookie loading ran while login is still blocked on loginGate: the
+		// two are genuinely concurrent, not sequential.
+	case <-time.After(time.Second):
+		t.Fatal("cookie loading never started before the timeout; Resolve appears to wait for login first")
+	}
+
+	releaseLogin()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Resolve() error = %v", err)
+		}
+		resolved := <-resultCh
+		if resolved.Session.Browser != cookies.BrowserChromium {
+			t.Fatalf("session browser = %q, want %q", resolved.Session.Browser, cookies.BrowserChromium)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Resolve() did not return after login was released")
 	}
 }
