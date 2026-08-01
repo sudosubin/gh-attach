@@ -112,8 +112,8 @@ type gatedProvider struct {
 	sessions []browserprovider.BrowserSession
 }
 
-func (p gatedProvider) Browser() cookies.Browser { return cookies.BrowserChromium }
-func (p gatedProvider) BackendName() string      { return "sweetcookie" }
+func (gatedProvider) Browser() cookies.Browser { return cookies.BrowserChromium }
+func (gatedProvider) BackendName() string      { return "sweetcookie" }
 
 func (p gatedProvider) Load(context.Context, string, cookies.Source) ([]browserprovider.BrowserSession, error) {
 	select {
