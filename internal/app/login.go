@@ -1,9 +1,25 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/cli/go-gh/v2/pkg/config"
+	"github.com/sudosubin/gh-attach/internal/github/rest"
 )
+
+// lazyAPILoginResolver builds the REST client only when the API fallback runs.
+type lazyAPILoginResolver struct {
+	host string
+}
+
+func (r lazyAPILoginResolver) CurrentLogin() (string, error) {
+	api, err := rest.NewService(r.host, nil)
+	if err != nil {
+		return "", fmt.Errorf("init gh api service: %w", err)
+	}
+	return api.CurrentLogin()
+}
 
 // loginFromLocalToken resolves the login from local gh config; an empty token means keyring/absent -> API fallback.
 func loginFromLocalToken(host string) (string, bool) {

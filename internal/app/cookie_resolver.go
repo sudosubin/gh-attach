@@ -36,8 +36,8 @@ func NewCookieResolver(
 	}
 }
 
-// Resolve expands "auto" sources and returns the first session matching ghLogin via dotcom_user.
-func (r *CookieResolver) Resolve(ctx context.Context, host, ghLogin string, sources []cookies.Source) (ResolvedCookies, error) {
+// Resolve returns the first session matching ghLogin (a lazily-called thunk).
+func (r *CookieResolver) Resolve(ctx context.Context, host string, ghLogin func() (string, error), sources []cookies.Source) (ResolvedCookies, error) {
 	attempts := 0
 
 	for idx, source := range sources {
@@ -67,14 +67,19 @@ func (r *CookieResolver) Resolve(ctx context.Context, host, ghLogin string, sour
 					continue
 				}
 
-				if !containsFold(dotcomUsers, ghLogin) {
+				login, err := ghLogin()
+				if err != nil {
+					return ResolvedCookies{}, err
+				}
+
+				if !containsFold(dotcomUsers, login) {
 					r.logf("source[%d]: browser=%s provider=%s profile=%q skipped (dotcom_user=%q != gh_login=%q)\n",
-						idx, candidate.Browser, backendName, session.Profile, strings.Join(dotcomUsers, ","), ghLogin)
+						idx, candidate.Browser, backendName, session.Profile, strings.Join(dotcomUsers, ","), login)
 					continue
 				}
 
 				r.logf("source[%d]: browser=%s provider=%s profile=%q matched dotcom_user=%q\n",
-					idx, candidate.Browser, backendName, session.Profile, ghLogin)
+					idx, candidate.Browser, backendName, session.Profile, login)
 				r.logf("selected source: browser=%s profile=%q cookie_store_path=%q provider=%s\n",
 					candidate.Browser, session.Profile, candidate.CookieStorePath, backendName)
 

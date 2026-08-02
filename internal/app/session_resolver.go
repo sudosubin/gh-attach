@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
@@ -42,10 +43,26 @@ func NewSessionResolver(logins LoginResolver, cookies *CookieResolver) *SessionR
 	return &SessionResolver{logins: logins, cookies: cookies}
 }
 
+// Resolve runs login in the background so it overlaps cookie loading.
 func (s *SessionResolver) Resolve(ctx context.Context, host string, sources []cookies.Source) (ResolvedCookies, error) {
-	login, err := s.logins.Login(host)
-	if err != nil {
-		return ResolvedCookies{}, fmt.Errorf("resolve current login: %w", err)
+	type loginResult struct {
+		login string
+		err   error
 	}
-	return s.cookies.Resolve(ctx, host, login, sources)
+
+	loginCh := make(chan loginResult, 1)
+	go func() {
+		login, err := s.logins.Login(host)
+		loginCh <- loginResult{login, err}
+	}()
+
+	ghLogin := sync.OnceValues(func() (string, error) {
+		r := <-loginCh
+		if r.err != nil {
+			return "", fmt.Errorf("resolve current login: %w", r.err)
+		}
+		return r.login, nil
+	})
+
+	return s.cookies.Resolve(ctx, host, ghLogin, sources)
 }

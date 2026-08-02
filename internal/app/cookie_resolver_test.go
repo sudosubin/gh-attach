@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -31,6 +32,21 @@ func (p stubProvider) Load(_ context.Context, _ string, _ cookies.Source) ([]bro
 	return p.sessions, nil
 }
 
+func staticLogin(login string) func() (string, error) {
+	return func() (string, error) { return login, nil }
+}
+
+// trackingLogin's called() reports whether the thunk was ever invoked.
+func trackingLogin(login string, err error) (thunk func() (string, error), called func() bool) {
+	var wasCalled bool
+	thunk = func() (string, error) {
+		wasCalled = true
+		return login, err
+	}
+	called = func() bool { return wasCalled }
+	return thunk, called
+}
+
 func TestCookieResolver_MatchesAnyDotcomUserValue(t *testing.T) {
 	t.Parallel()
 
@@ -51,7 +67,7 @@ func TestCookieResolver_MatchesAnyDotcomUserValue(t *testing.T) {
 	}
 
 	resolver := NewCookieResolver(providers, false, nil)
-	resolved, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
+	resolved, err := resolver.Resolve(t.Context(), "github.com", staticLogin("sudosubin"), sources)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -80,7 +96,7 @@ func TestCookieResolver_RejectsSessionsWithoutMatchingLogin(t *testing.T) {
 				}}},
 			}
 			resolver := NewCookieResolver(providers, false, nil)
-			if _, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", []cookies.Source{{Browser: cookies.BrowserChromium}}); err == nil {
+			if _, err := resolver.Resolve(t.Context(), "github.com", staticLogin("sudosubin"), []cookies.Source{{Browser: cookies.BrowserChromium}}); err == nil {
 				t.Fatal("Resolve() error = nil, want non-nil")
 			}
 		})
@@ -100,7 +116,7 @@ func TestCookieResolver_SkipsMissingProvider(t *testing.T) {
 	}
 
 	resolver := NewCookieResolver(providers, false, nil)
-	_, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
+	_, err := resolver.Resolve(t.Context(), "github.com", staticLogin("sudosubin"), sources)
 	if err == nil {
 		t.Fatalf("Resolve() error = nil, want non-nil")
 	}
@@ -122,7 +138,7 @@ func TestCookieResolver_LoginMatchIsCaseInsensitive(t *testing.T) {
 	}
 
 	resolver := NewCookieResolver(providers, false, nil)
-	resolved, err := resolver.Resolve(t.Context(), "github.com", "sudosubin", sources)
+	resolved, err := resolver.Resolve(t.Context(), "github.com", staticLogin("sudosubin"), sources)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -162,7 +178,7 @@ func TestCookieResolver_PicksSessionMatchingLogin(t *testing.T) {
 	}
 
 	resolver := NewCookieResolver(providers, false, nil)
-	resolved, err := resolver.Resolve(t.Context(), "github.com", "octocat", sources)
+	resolved, err := resolver.Resolve(t.Context(), "github.com", staticLogin("octocat"), sources)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -176,5 +192,55 @@ func TestCookieResolver_PicksSessionMatchingLogin(t *testing.T) {
 		if c.Value == "sudo-session" || c.Value == "sudosubin" {
 			t.Fatalf("resolved the wrong session: got a cookie from the non-matching one: %+v", c)
 		}
+	}
+}
+
+func TestCookieResolver_DoesNotCallGhLoginWithoutADotcomUserCandidate(t *testing.T) {
+	t.Parallel()
+
+	sources := []cookies.Source{{Browser: cookies.BrowserChromium}}
+	providers := map[cookies.Browser]browserprovider.BrowserProvider{
+		cookies.BrowserChromium: stubProvider{
+			backend: "sweetcookie",
+			sessions: []browserprovider.BrowserSession{{
+				Browser: cookies.BrowserChromium,
+				Cookies: []*http.Cookie{{Name: "other_cookie", Value: "value"}},
+			}},
+		},
+	}
+
+	thunk, called := trackingLogin("sudosubin", nil)
+	resolver := NewCookieResolver(providers, false, nil)
+	if _, err := resolver.Resolve(t.Context(), "github.com", thunk, sources); err == nil {
+		t.Fatal("Resolve() error = nil, want non-nil")
+	}
+	if called() {
+		t.Fatal("ghLogin was called even though no candidate had a dotcom_user to compare")
+	}
+}
+
+func TestCookieResolver_PropagatesGhLoginError(t *testing.T) {
+	t.Parallel()
+
+	sources := []cookies.Source{{Browser: cookies.BrowserChromium}}
+	providers := map[cookies.Browser]browserprovider.BrowserProvider{
+		cookies.BrowserChromium: stubProvider{
+			backend: "sweetcookie",
+			sessions: []browserprovider.BrowserSession{{
+				Browser: cookies.BrowserChromium,
+				Cookies: []*http.Cookie{{Name: "dotcom_user", Value: "sudosubin"}},
+			}},
+		},
+	}
+
+	wantErr := errors.New("boom")
+	thunk, called := trackingLogin("", wantErr)
+	resolver := NewCookieResolver(providers, false, nil)
+	_, err := resolver.Resolve(t.Context(), "github.com", thunk, sources)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Resolve() error = %v, want it to wrap %v", err, wantErr)
+	}
+	if !called() {
+		t.Fatal("ghLogin was never called even though a candidate had a dotcom_user to compare")
 	}
 }
