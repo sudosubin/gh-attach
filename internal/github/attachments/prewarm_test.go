@@ -8,8 +8,7 @@ import (
 	"time"
 )
 
-// stubLookup returns a lookup stub and a thread-safe snapshot of the hosts it
-// saw; a non-nil block gates each call so a test can control lookup completion.
+// stubLookup returns a lookup stub + host snapshot; block gates each call.
 func stubLookup(block <-chan struct{}) (lookup hostLookupFunc, snapshot func() []string) {
 	var mu sync.Mutex
 	var called []string
@@ -59,7 +58,7 @@ func TestPrewarmUploadHostDNS_EnterpriseSkipsLookup(t *testing.T) {
 }
 
 func TestPrewarmUploadHostDNS_ReturnsWithoutWaiting(t *testing.T) {
-	block := make(chan struct{}) // never closed: lookups would hang forever if awaited
+	block := make(chan struct{}) // never closed: awaiting a lookup would hang
 	defer close(block)
 	lookup, _ := stubLookup(block)
 

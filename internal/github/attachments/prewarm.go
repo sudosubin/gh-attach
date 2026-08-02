@@ -8,8 +8,7 @@ import (
 	"github.com/cli/go-gh/v2/pkg/auth"
 )
 
-// cloudUploadHosts both get resolved: which one a file lands on is content-type
-// dependent and only decided server-side by the policies response.
+// cloudUploadHosts: both resolved; content-type picks one, server-side.
 var cloudUploadHosts = []string{
 	"objects-origin.githubusercontent.com",
 	"github-production-user-asset-6210df.s3.amazonaws.com",
@@ -19,19 +18,15 @@ const prewarmTimeout = 5 * time.Second
 
 type hostLookupFunc func(ctx context.Context, host string) ([]string, error)
 
-// PrewarmUploadHostDNS resolves the upload hosts' DNS in the background so the
-// lookup overlaps referer-page fetch rather than sitting on the critical path.
-// DNS-only (no HTTP, no held connection); skipped on GHES, whose upload host
-// isn't known until the policies response.
+// PrewarmUploadHostDNS resolves upload-host DNS in the background, DNS-only.
 func PrewarmUploadHostDNS(ctx context.Context, host string) {
 	prewarmUploadHostDNS(ctx, host, net.DefaultResolver.LookupHost)
 }
 
-// lookup is a parameter, not a package var, so a test's stub can't race the
-// fire-and-forget goroutines that may still read it after the test returns.
+// lookup is a param, not a package var, so test stubs don't race goroutines.
 func prewarmUploadHostDNS(ctx context.Context, host string, lookup hostLookupFunc) {
 	if auth.IsEnterprise(host) {
-		return
+		return // GHES upload host isn't known until the policies response
 	}
 
 	for _, h := range cloudUploadHosts {
