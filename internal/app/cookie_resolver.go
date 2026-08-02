@@ -36,12 +36,9 @@ func NewCookieResolver(
 	}
 }
 
-// Resolve expands "auto" sources and returns the first session matching ghLogin via dotcom_user.
-// ghLogin is called lazily — only once a candidate session actually has a
-// dotcom_user to compare — so a login lookup running concurrently (see
-// SessionResolver.Resolve) has as much time as possible to finish before
-// anything here blocks on it, and isn't called at all if no candidate ever
-// reaches the comparison.
+// Resolve returns the first session matching ghLogin via dotcom_user. ghLogin
+// is a thunk called only when a candidate needs comparing, so a concurrent
+// login lookup (see SessionResolver.Resolve) overlaps and isn't awaited early.
 func (r *CookieResolver) Resolve(ctx context.Context, host string, ghLogin func() (string, error), sources []cookies.Source) (ResolvedCookies, error) {
 	attempts := 0
 

@@ -93,8 +93,7 @@ func TestSessionResolver_PropagatesLoginError(t *testing.T) {
 	}
 }
 
-// blockingLoginResolver.Login doesn't return until gate is closed, letting
-// a test observe what happens while login resolution is still in flight.
+// blockingLoginResolver.Login blocks until gate is closed.
 type blockingLoginResolver struct {
 	gate  <-chan struct{}
 	login string
@@ -105,8 +104,7 @@ func (r blockingLoginResolver) Login(string) (string, error) {
 	return r.login, nil
 }
 
-// gatedProvider signals started (best-effort, non-blocking) the moment
-// Load runs, so a test can observe exactly when cookie loading began.
+// gatedProvider signals started (non-blocking) when Load runs.
 type gatedProvider struct {
 	started  chan<- struct{}
 	sessions []browserprovider.BrowserSession
@@ -123,14 +121,12 @@ func (p gatedProvider) Load(context.Context, string, cookies.Source) ([]browserp
 	return p.sessions, nil
 }
 
-// TestSessionResolver_CookieLoadingOverlapsLogin proves the two run
-// concurrently rather than cookie loading waiting on login to finish
-// first: it holds login blocked, confirms cookie loading has already
-// started, and only then releases login.
+// TestSessionResolver_CookieLoadingOverlapsLogin holds login blocked and
+// confirms cookie loading starts anyway, proving the two run concurrently.
 func TestSessionResolver_CookieLoadingOverlapsLogin(t *testing.T) {
 	loginGate := make(chan struct{})
 	releaseLogin := sync.OnceFunc(func() { close(loginGate) })
-	defer releaseLogin() // safety net if the test fails before the deliberate release below
+	defer releaseLogin() // safety net if the test fails before the release below
 
 	loadStarted := make(chan struct{}, 1)
 	providers := map[cookies.Browser]browserprovider.BrowserProvider{
@@ -157,9 +153,7 @@ func TestSessionResolver_CookieLoadingOverlapsLogin(t *testing.T) {
 	}()
 
 	select {
-	case <-loadStarted:
-		// Cookie loading ran while login is still blocked on loginGate: the
-		// two are genuinely concurrent, not sequential.
+	case <-loadStarted: // ran while login is still blocked: genuinely concurrent
 	case <-time.After(time.Second):
 		t.Fatal("cookie loading never started before the timeout; Resolve appears to wait for login first")
 	}

@@ -32,14 +32,11 @@ func (p stubProvider) Load(_ context.Context, _ string, _ cookies.Source) ([]bro
 	return p.sessions, nil
 }
 
-// staticLogin builds a ghLogin thunk that always succeeds with login.
 func staticLogin(login string) func() (string, error) {
 	return func() (string, error) { return login, nil }
 }
 
-// trackingLogin builds a ghLogin thunk that records whether it was ever
-// called, so tests can assert CookieResolver only pays for login resolution
-// when a candidate session actually needs it.
+// trackingLogin's called() reports whether the thunk was ever invoked.
 func trackingLogin(login string, err error) (thunk func() (string, error), called func() bool) {
 	var wasCalled bool
 	thunk = func() (string, error) {

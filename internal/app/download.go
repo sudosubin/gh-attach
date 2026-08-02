@@ -135,8 +135,6 @@ func (s *Service) resolveBrowserSession(
 	}
 	loginResolver := s.loginResolver
 	if loginResolver == nil {
-		// rest.NewService is only actually built inside lazyAPILoginResolver,
-		// once Login() finds no local token to resolve from directly.
 		loginResolver = NewConfigLoginResolver(lazyAPILoginResolver{host: host})
 	}
 	resolved, err := NewSessionResolver(

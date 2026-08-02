@@ -8,10 +8,8 @@ import (
 	"github.com/sudosubin/gh-attach/internal/github/rest"
 )
 
-// lazyAPILoginResolver defers building a REST client until Login() actually
-// needs the API fallback, so hosts.yml/env-token users — who resolve via
-// loginFromLocalToken and never reach CurrentLogin — don't pay for
-// constructing a client they won't use.
+// lazyAPILoginResolver builds the REST client only when the API fallback is
+// reached, so local-token users who resolve without it don't pay for one.
 type lazyAPILoginResolver struct {
 	host string
 }
