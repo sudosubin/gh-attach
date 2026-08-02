@@ -8,11 +8,8 @@ import (
 	"time"
 )
 
-// stubLookup returns a lookup stub plus a thread-safe snapshot of the hosts
-// it was called with; block, if non-nil, is read from before returning so a
-// test can control when in-flight lookups complete. It's a local closure
-// (not a package var), so a prewarm goroutine that outlives its test can't
-// race with another test's cleanup.
+// stubLookup returns a lookup stub and a thread-safe snapshot of the hosts it
+// saw; a non-nil block gates each call so a test can control lookup completion.
 func stubLookup(block <-chan struct{}) (lookup hostLookupFunc, snapshot func() []string) {
 	var mu sync.Mutex
 	var called []string
@@ -54,8 +51,7 @@ func TestPrewarmUploadHostDNS_EnterpriseSkipsLookup(t *testing.T) {
 
 	prewarmUploadHostDNS(t.Context(), "github.example.com", lookup)
 
-	// No network signal to wait on for a negative case; a short grace
-	// period is the standard way to assert "this doesn't happen".
+	// Negative case: no signal to await, so a short grace period stands in.
 	time.Sleep(20 * time.Millisecond)
 	if got := snapshot(); len(got) != 0 {
 		t.Fatalf("enterprise host triggered lookups: %v", got)

@@ -52,8 +52,7 @@ func (s *Service) Run(ctx context.Context, req Request) ([]attachments.Asset, er
 
 	repo := rest.Repository{Host: repoSpec.Host, Owner: repoSpec.Owner, Name: repoSpec.Name}
 
-	// Kicked off now so the DNS lookup overlaps with session/referer resolution
-	// below instead of sitting on the critical path right before the upload.
+	// Overlaps the DNS lookup with session/referer resolution below.
 	attachments.PrewarmUploadHostDNS(ctx, repo.Host)
 
 	var session web.Session
