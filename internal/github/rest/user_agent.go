@@ -13,9 +13,7 @@ import (
 	"github.com/cli/safeexec"
 )
 
-// ghModulePath is gh's own module path (distinct from BuildInfo.Path, which
-// is the *main package* path, e.g. "github.com/cli/cli/v2/cmd/gh"); used to
-// reject buildinfo read from a same-named-but-different "gh" binary on PATH.
+// ghModulePath is gh's module path, not BuildInfo.Path (the main *package*, e.g. ".../cmd/gh").
 const ghModulePath = "github.com/cli/cli/v2"
 
 var (
@@ -23,13 +21,10 @@ var (
 	ldflagsVersionPattern = regexp.MustCompile(`internal/build\.Version=(\S+)`)
 )
 
-// githubCLIAppVersion resolves the installed gh CLI's version. It prefers
-// reading the binary's embedded build info (no process spawn) and only
-// shells out to "gh version" when that's unavailable (e.g. binaries built
-// with -trimpath, which is how Homebrew, nixpkgs, and most distro packages
-// build gh).
 var githubCLIAppVersion = sync.OnceValue(resolveGHCLIVersion)
 
+// resolveGHCLIVersion prefers the binary's embedded build info (no process
+// spawn); the exec fallback only fires for -trimpath builds (Homebrew, nixpkgs, distros).
 func resolveGHCLIVersion() string {
 	if v := versionFromBuildInfo(ghExecutablePath()); v != "" {
 		return v
@@ -42,10 +37,8 @@ func resolveGHCLIVersion() string {
 	return parseGHCLIVersion(stdout.String())
 }
 
-// ghExecutablePath mirrors go-gh's own lookup order (GH_PATH, then PATH),
-// resolved through symlinks since package managers often point PATH at a
-// symlink (or, on some nixpkgs setups, a wrapper script) rather than the
-// real binary.
+// ghExecutablePath mirrors go-gh's lookup order (GH_PATH, then PATH), resolving
+// symlinks since package managers often point PATH at one rather than the real binary.
 func ghExecutablePath() string {
 	exe := os.Getenv("GH_PATH")
 	if exe == "" {
@@ -71,9 +64,7 @@ func versionFromBuildInfo(exe string) string {
 	return versionFromBuildInfoData(info)
 }
 
-// versionFromBuildInfoData mirrors gh's own internal/build version
-// resolution (ldflags override, else module version), so it stays
-// consistent with what "gh version" itself would report.
+// versionFromBuildInfoData mirrors gh's own internal/build resolution (ldflags override, else module version).
 func versionFromBuildInfoData(info *debug.BuildInfo) string {
 	if info.Main.Path != ghModulePath {
 		return ""
