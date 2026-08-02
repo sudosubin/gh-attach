@@ -13,7 +13,7 @@ import (
 	"github.com/cli/safeexec"
 )
 
-// ghModulePath is gh's module path, not BuildInfo.Path (the main *package*, e.g. ".../cmd/gh").
+// ghModulePath is gh's module path, not BuildInfo.Path (its main package).
 const ghModulePath = "github.com/cli/cli/v2"
 
 var (
@@ -23,8 +23,7 @@ var (
 
 var githubCLIAppVersion = sync.OnceValue(resolveGHCLIVersion)
 
-// resolveGHCLIVersion prefers the binary's embedded build info (no process
-// spawn); the exec fallback only fires for -trimpath builds (Homebrew, nixpkgs, distros).
+// resolveGHCLIVersion reads build info; exec fallback for -trimpath builds.
 func resolveGHCLIVersion() string {
 	if v := versionFromBuildInfo(ghExecutablePath()); v != "" {
 		return v
@@ -37,8 +36,7 @@ func resolveGHCLIVersion() string {
 	return parseGHCLIVersion(stdout.String())
 }
 
-// ghExecutablePath mirrors go-gh's lookup order (GH_PATH, then PATH), resolving
-// symlinks since package managers often point PATH at one rather than the real binary.
+// ghExecutablePath: go-gh's lookup (GH_PATH then PATH), symlinks resolved.
 func ghExecutablePath() string {
 	exe := os.Getenv("GH_PATH")
 	if exe == "" {
@@ -64,7 +62,7 @@ func versionFromBuildInfo(exe string) string {
 	return versionFromBuildInfoData(info)
 }
 
-// versionFromBuildInfoData mirrors gh's own internal/build resolution (ldflags override, else module version).
+// versionFromBuildInfoData mirrors gh's own internal/build version resolution.
 func versionFromBuildInfoData(info *debug.BuildInfo) string {
 	if info.Main.Path != ghModulePath {
 		return ""
