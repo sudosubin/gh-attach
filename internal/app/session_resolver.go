@@ -43,8 +43,7 @@ func NewSessionResolver(logins LoginResolver, cookies *CookieResolver) *SessionR
 	return &SessionResolver{logins: logins, cookies: cookies}
 }
 
-// Resolve runs login resolution in the background so it overlaps cookie loading;
-// the two only rendezvous when a session's dotcom_user needs the login to compare.
+// Resolve runs login in the background so it overlaps cookie loading.
 func (s *SessionResolver) Resolve(ctx context.Context, host string, sources []cookies.Source) (ResolvedCookies, error) {
 	type loginResult struct {
 		login string

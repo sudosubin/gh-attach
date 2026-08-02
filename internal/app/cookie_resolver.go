@@ -36,9 +36,7 @@ func NewCookieResolver(
 	}
 }
 
-// Resolve returns the first session matching ghLogin via dotcom_user. ghLogin
-// is a thunk called only when a candidate needs comparing, so a concurrent
-// login lookup (see SessionResolver.Resolve) overlaps and isn't awaited early.
+// Resolve returns the first session matching ghLogin (a lazily-called thunk).
 func (r *CookieResolver) Resolve(ctx context.Context, host string, ghLogin func() (string, error), sources []cookies.Source) (ResolvedCookies, error) {
 	attempts := 0
 

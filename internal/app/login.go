@@ -8,8 +8,7 @@ import (
 	"github.com/sudosubin/gh-attach/internal/github/rest"
 )
 
-// lazyAPILoginResolver builds the REST client only when the API fallback is
-// reached, so local-token users who resolve without it don't pay for one.
+// lazyAPILoginResolver builds the REST client only when the API fallback runs.
 type lazyAPILoginResolver struct {
 	host string
 }

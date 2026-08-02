@@ -121,8 +121,7 @@ func (p gatedProvider) Load(context.Context, string, cookies.Source) ([]browserp
 	return p.sessions, nil
 }
 
-// TestSessionResolver_CookieLoadingOverlapsLogin holds login blocked and
-// confirms cookie loading starts anyway, proving the two run concurrently.
+// TestSessionResolver_CookieLoadingOverlapsLogin proves they run concurrently.
 func TestSessionResolver_CookieLoadingOverlapsLogin(t *testing.T) {
 	loginGate := make(chan struct{})
 	releaseLogin := sync.OnceFunc(func() { close(loginGate) })
