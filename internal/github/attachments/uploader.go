@@ -217,17 +217,23 @@ func (u *Uploader) requestPoliciesCloud(ctx context.Context, refererPage *Refere
 	return u.requestPolicies(ctx, refererPage.URL, policiesFields(repositoryID, fileName, fileSize, contentType), headers)
 }
 
-// requestPoliciesEnterprise authenticates via authenticity_token and fails fast if it's missing from the referer page.
+// requestPoliciesEnterprise uses the authentication metadata exposed by the GHES referer page.
 func (u *Uploader) requestPoliciesEnterprise(ctx context.Context, refererPage *RefererPage, repositoryID int64, fileName string, fileSize int64, contentType string) (policiesResponse, error) {
 	refererMeta := refererPage.Meta
-	if refererMeta.AuthenticityToken == "" {
-		return policiesResponse{}, fmt.Errorf("enterprise host requires an authenticity_token, but none was found on the referer page")
+	fields := policiesFields(repositoryID, fileName, fileSize, contentType)
+	headers := map[string]string{}
+	if refererMeta.AuthenticityToken != "" {
+		fields["authenticity_token"] = refererMeta.AuthenticityToken
+	} else if strings.TrimSpace(refererMeta.FetchNonce) != "" {
+		headers["X-Fetch-Nonce"] = refererMeta.FetchNonce
+		if strings.TrimSpace(refererMeta.GitHubClientVersion) != "" {
+			headers["X-GitHub-Client-Version"] = refererMeta.GitHubClientVersion
+		}
+	} else {
+		return policiesResponse{}, fmt.Errorf("enterprise host provided neither an authenticity_token nor a fetch nonce")
 	}
 
-	fields := policiesFields(repositoryID, fileName, fileSize, contentType)
-	fields["authenticity_token"] = refererMeta.AuthenticityToken
-
-	return u.requestPolicies(ctx, refererPage.URL, fields, map[string]string{})
+	return u.requestPolicies(ctx, refererPage.URL, fields, headers)
 }
 
 func policiesFields(repositoryID int64, fileName string, fileSize int64, contentType string) map[string]string {

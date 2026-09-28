@@ -267,6 +267,40 @@ func TestRequestPoliciesEnterprise_SendsAuthTokenAndVerifiedFetch(t *testing.T) 
 	}
 }
 
+func TestRequestPoliciesEnterprise_UsesFetchNonceWhenAuthTokenMissing(t *testing.T) {
+	var receivedAuthToken string
+	var receivedFetchNonce, receivedClientVersion string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("ParseMultipartForm() error = %v", err)
+		}
+		receivedAuthToken = r.FormValue("authenticity_token")
+		receivedFetchNonce = r.Header.Get("X-Fetch-Nonce")
+		receivedClientVersion = r.Header.Get("X-GitHub-Client-Version")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"upload_url":"https://uploads.enterprise.test/upload","form":{},"header":{},"asset":{"id":1}}`))
+	}))
+	defer server.Close()
+
+	u := newTestUploader(server, true)
+	refererPage := &RefererPage{
+		URL:  "https://github.enterprise.test/owner/repo/issues/new",
+		Meta: refererPageMetadata{FetchNonce: "nonce-123", GitHubClientVersion: "1.2.3"},
+	}
+
+	_, err := u.requestPoliciesEnterprise(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
+	if err != nil {
+		t.Fatalf("requestPoliciesEnterprise() error = %v", err)
+	}
+	if receivedAuthToken != "" {
+		t.Fatalf("authenticity_token = %q, want empty", receivedAuthToken)
+	}
+	if receivedFetchNonce != "nonce-123" || receivedClientVersion != "1.2.3" {
+		t.Fatalf("fetch-nonce headers = (%q, %q), want (%q, %q)", receivedFetchNonce, receivedClientVersion, "nonce-123", "1.2.3")
+	}
+}
+
 func TestRequestPoliciesEnterprise_FailsFastWhenAuthTokenMissing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		t.Fatalf("unexpected request to %s: enterprise path should fail before sending one", r.URL.Path)
