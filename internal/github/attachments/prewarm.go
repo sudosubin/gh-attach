@@ -30,10 +30,10 @@ func prewarmUploadHostDNS(ctx context.Context, host string, lookup hostLookupFun
 	}
 
 	for _, h := range cloudUploadHosts {
-		go func(h string) {
+		go func() {
 			ctx, cancel := context.WithTimeout(ctx, prewarmTimeout)
 			defer cancel()
 			_, _ = lookup(ctx, h)
-		}(h)
+		}()
 	}
 }
