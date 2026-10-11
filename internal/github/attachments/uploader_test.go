@@ -1,9 +1,11 @@
 package attachments
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,6 +18,20 @@ func newTestUploader(server *httptest.Server, enterprise bool) *Uploader {
 		client:       web.NewClient(server.Client(), "", nil),
 		isEnterprise: enterprise,
 	}
+}
+
+func writeProbeFile(t *testing.T, name string) string {
+	t.Helper()
+
+	path := t.TempDir() + "/" + name
+	if err := os.WriteFile(path, []byte("probe"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	return path
+}
+
+func newTestUploadFile(refererPage *RefererPage) uploadFile {
+	return uploadFile{name: "file.txt", size: 12, contentType: "text/plain", repositoryID: 1, refererPage: refererPage}
 }
 
 func TestContentTypeForFile(t *testing.T) {
@@ -110,7 +126,7 @@ func TestContentTypeForFile_UnknownExtensionUsesServerInference(t *testing.T) {
 	}
 }
 
-func TestRequestPolicies_InjectsRefererAndUploadHeaders(t *testing.T) {
+func TestRequestPolicy_InjectsRefererAndUploadHeaders(t *testing.T) {
 	const expectedReferer = "https://github.com/owner/repo/commit/abc123"
 	const expectedFetchNonce = "nonce-123"
 	const expectedClientVersion = "1.2.3"
@@ -142,9 +158,9 @@ func TestRequestPolicies_InjectsRefererAndUploadHeaders(t *testing.T) {
 		Meta: refererPageMetadata{FetchNonce: "nonce-123", GitHubClientVersion: "1.2.3"},
 	}
 
-	_, err := u.requestPoliciesCloud(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicyCommentBox(t.Context(), newTestUploadFile(refererPage))
 	if err != nil {
-		t.Fatalf("requestPoliciesCloud() error = %v", err)
+		t.Fatalf("requestPolicyCommentBox() error = %v", err)
 	}
 	if receivedReferer != expectedReferer {
 		t.Fatalf("Referer header = %q, want %q", receivedReferer, expectedReferer)
@@ -163,7 +179,7 @@ func TestRequestPolicies_InjectsRefererAndUploadHeaders(t *testing.T) {
 	}
 }
 
-func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.T) {
+func TestRequestPolicy_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.T) {
 	var receivedFetchNonce string
 	var receivedClientVersion string
 
@@ -181,9 +197,9 @@ func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.
 		Meta: refererPageMetadata{},
 	}
 
-	_, err := u.requestPoliciesCloud(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicyCommentBox(t.Context(), newTestUploadFile(refererPage))
 	if err != nil {
-		t.Fatalf("requestPoliciesCloud() error = %v", err)
+		t.Fatalf("requestPolicyCommentBox() error = %v", err)
 	}
 	if receivedFetchNonce != "" {
 		t.Fatalf("X-Fetch-Nonce = %q, want empty", receivedFetchNonce)
@@ -193,7 +209,7 @@ func TestRequestPolicies_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.
 	}
 }
 
-func TestRequestPoliciesCloud_IgnoresAuthenticityTokenOnPage(t *testing.T) {
+func TestRequestPolicyCommentBox_IgnoresAuthenticityTokenOnPage(t *testing.T) {
 	var receivedAuthToken string
 	var receivedFetchNonce string
 
@@ -215,9 +231,9 @@ func TestRequestPoliciesCloud_IgnoresAuthenticityTokenOnPage(t *testing.T) {
 		Meta: refererPageMetadata{AuthenticityToken: "incidental-token", FetchNonce: "nonce-123"},
 	}
 
-	_, err := u.requestPoliciesCloud(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicyCommentBox(t.Context(), newTestUploadFile(refererPage))
 	if err != nil {
-		t.Fatalf("requestPoliciesCloud() error = %v", err)
+		t.Fatalf("requestPolicyCommentBox() error = %v", err)
 	}
 	if receivedAuthToken != "" {
 		t.Fatalf("authenticity_token = %q, want empty", receivedAuthToken)
@@ -227,7 +243,7 @@ func TestRequestPoliciesCloud_IgnoresAuthenticityTokenOnPage(t *testing.T) {
 	}
 }
 
-func TestRequestPoliciesEnterprise_SendsAuthTokenAndVerifiedFetch(t *testing.T) {
+func TestRequestPolicyFileAttachment_SendsAuthTokenAndVerifiedFetch(t *testing.T) {
 	var receivedAuthToken string
 	var receivedVerifiedFetch, receivedFetchNonce, receivedClientVersion string
 
@@ -251,9 +267,9 @@ func TestRequestPoliciesEnterprise_SendsAuthTokenAndVerifiedFetch(t *testing.T) 
 		Meta: refererPageMetadata{AuthenticityToken: "ghes-token", FetchNonce: "nonce-123", GitHubClientVersion: "1.2.3"},
 	}
 
-	_, err := u.requestPoliciesEnterprise(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicyFileAttachment(t.Context(), newTestUploadFile(refererPage))
 	if err != nil {
-		t.Fatalf("requestPoliciesEnterprise() error = %v", err)
+		t.Fatalf("requestPolicyFileAttachment() error = %v", err)
 	}
 	if receivedAuthToken != "ghes-token" {
 		t.Fatalf("authenticity_token = %q, want %q", receivedAuthToken, "ghes-token")
@@ -267,7 +283,7 @@ func TestRequestPoliciesEnterprise_SendsAuthTokenAndVerifiedFetch(t *testing.T) 
 	}
 }
 
-func TestRequestPoliciesEnterprise_FailsFastWhenAuthTokenMissing(t *testing.T) {
+func TestRequestPolicyFileAttachment_FailsFastWhenAuthTokenMissing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		t.Fatalf("unexpected request to %s: enterprise path should fail before sending one", r.URL.Path)
 	}))
@@ -279,35 +295,32 @@ func TestRequestPoliciesEnterprise_FailsFastWhenAuthTokenMissing(t *testing.T) {
 		Meta: refererPageMetadata{},
 	}
 
-	_, err := u.requestPoliciesEnterprise(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicyFileAttachment(t.Context(), newTestUploadFile(refererPage))
 	if err == nil {
-		t.Fatal("requestPoliciesEnterprise() error = nil, want an error")
+		t.Fatal("requestPolicyFileAttachment() error = nil, want an error")
 	}
 }
 
-func TestUploadEnterpriseFlow_SkipsFinalize(t *testing.T) {
-	tmpFile := t.TempDir() + "/probe.patch"
-	if err := os.WriteFile(tmpFile, []byte("probe"), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
+func TestUploadEnterpriseFileAttachmentFlow_SkipsCompletion(t *testing.T) {
+	tmpFile := writeProbeFile(t, "probe.patch")
 
-	var policiesContentType, uploadContentType string
+	var policyContentType, storageContentType string
 
 	mux := http.NewServeMux()
-	// No finalize handler registered — a stray call would 404 and fail Upload().
+	// No completion handler registered — a stray call would 404 and fail Upload().
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	mux.HandleFunc("/upload/policies/assets", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /upload/policies/assets", func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseMultipartForm(1 << 20); err != nil {
 			t.Fatalf("ParseMultipartForm() error = %v", err)
 		}
-		policiesContentType = r.FormValue("content_type")
+		policyContentType = r.FormValue("content_type")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"upload_url":"` + server.URL + `/media/upload","form":{},"header":{}}`))
 	})
-	mux.HandleFunc("/media/upload", func(w http.ResponseWriter, r *http.Request) {
-		uploadContentType = r.Header.Get("X-File-Content-Type")
+	mux.HandleFunc("POST /media/upload", func(w http.ResponseWriter, r *http.Request) {
+		storageContentType = r.Header.Get("X-File-Content-Type")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"id":1,"href":"https://github.enterprise.test/user-attachments/assets/abc"}`))
 	})
@@ -316,7 +329,7 @@ func TestUploadEnterpriseFlow_SkipsFinalize(t *testing.T) {
 
 	refererPage := &RefererPage{
 		URL:  server.URL + "/owner/repo/issues/new",
-		Meta: refererPageMetadata{AuthenticityToken: "ghes-token"},
+		Meta: refererPageMetadata{AuthenticityToken: "ghes-token", UploadForm: uploadFormFileAttachment},
 	}
 
 	asset, err := u.Upload(t.Context(), tmpFile, refererPage, 1)
@@ -324,18 +337,15 @@ func TestUploadEnterpriseFlow_SkipsFinalize(t *testing.T) {
 		t.Fatalf("Upload() error = %v", err)
 	}
 	if asset.Href != "https://github.enterprise.test/user-attachments/assets/abc" {
-		t.Fatalf("asset.Href = %q, want the media upload response's href", asset.Href)
+		t.Fatalf("asset.Href = %q, want the storage response's href", asset.Href)
 	}
-	if policiesContentType != "" || uploadContentType != "" {
-		t.Fatalf("content types = (%q, %q), want both empty", policiesContentType, uploadContentType)
+	if policyContentType != "" || storageContentType != "" {
+		t.Fatalf("content types = (%q, %q), want both empty", policyContentType, storageContentType)
 	}
 }
 
-func TestUploadEnterpriseFlow_ReturnsPolicyErrorForUnsupportedFileType(t *testing.T) {
-	tmpFile := t.TempDir() + "/probe.js"
-	if err := os.WriteFile(tmpFile, []byte("probe"), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
+func TestUploadEnterpriseFileAttachmentFlow_ReturnsPolicyErrorForUnsupportedFileType(t *testing.T) {
+	tmpFile := writeProbeFile(t, "probe.js")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseMultipartForm(1 << 20); err != nil {
@@ -353,7 +363,7 @@ func TestUploadEnterpriseFlow_ReturnsPolicyErrorForUnsupportedFileType(t *testin
 	uploader := newTestUploader(server, true)
 	_, err := uploader.Upload(t.Context(), tmpFile, &RefererPage{
 		URL:  server.URL + "/owner/repo/issues/new",
-		Meta: refererPageMetadata{AuthenticityToken: "ghes-token"},
+		Meta: refererPageMetadata{AuthenticityToken: "ghes-token", UploadForm: uploadFormFileAttachment},
 	}, 123)
 	if err == nil {
 		t.Fatal("Upload() error = nil, want server policy error")
@@ -363,11 +373,8 @@ func TestUploadEnterpriseFlow_ReturnsPolicyErrorForUnsupportedFileType(t *testin
 	}
 }
 
-func TestUploadEnterpriseFlow_MediaHostGetsGHESOriginNotItsOwn(t *testing.T) {
-	tmpFile := t.TempDir() + "/probe.png"
-	if err := os.WriteFile(tmpFile, []byte("probe"), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
+func TestUploadEnterpriseFileAttachmentFlow_MediaHostGetsGHESOriginNotItsOwn(t *testing.T) {
+	tmpFile := writeProbeFile(t, "probe.png")
 
 	var mediaReferer, mediaOrigin string
 
@@ -379,11 +386,11 @@ func TestUploadEnterpriseFlow_MediaHostGetsGHESOriginNotItsOwn(t *testing.T) {
 	mediaServer := httptest.NewServer(mediaMux)
 	defer mediaServer.Close()
 
-	ghesMux.HandleFunc("/upload/policies/assets", func(w http.ResponseWriter, _ *http.Request) {
+	ghesMux.HandleFunc("POST /upload/policies/assets", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"upload_url":"` + mediaServer.URL + `/media/upload","form":{},"header":{}}`))
 	})
-	mediaMux.HandleFunc("/media/upload", func(w http.ResponseWriter, r *http.Request) {
+	mediaMux.HandleFunc("POST /media/upload", func(w http.ResponseWriter, r *http.Request) {
 		mediaReferer = r.Header.Get("Referer")
 		mediaOrigin = r.Header.Get("Origin")
 		w.WriteHeader(http.StatusOK)
@@ -394,7 +401,7 @@ func TestUploadEnterpriseFlow_MediaHostGetsGHESOriginNotItsOwn(t *testing.T) {
 
 	refererPage := &RefererPage{
 		URL:  ghesServer.URL + "/owner/repo/issues/new",
-		Meta: refererPageMetadata{AuthenticityToken: "ghes-token"},
+		Meta: refererPageMetadata{AuthenticityToken: "ghes-token", UploadForm: uploadFormFileAttachment},
 	}
 
 	asset, err := u.Upload(t.Context(), tmpFile, refererPage, 1)
@@ -408,22 +415,19 @@ func TestUploadEnterpriseFlow_MediaHostGetsGHESOriginNotItsOwn(t *testing.T) {
 	// media.<host> is a different host, so referer/origin are the GHES host's bare origin, not the media host's.
 	want := ghesServer.URL + "/"
 	if mediaReferer != want {
-		t.Fatalf("media upload Referer = %q, want %q", mediaReferer, want)
+		t.Fatalf("storage Referer = %q, want %q", mediaReferer, want)
 	}
 	if ghesOrigin := mustOrigin(t, ghesServer.URL); mediaOrigin != ghesOrigin {
-		t.Fatalf("media upload Origin = %q, want %q (the GHES host, not the media host)", mediaOrigin, ghesOrigin)
+		t.Fatalf("storage Origin = %q, want %q (the GHES host, not the media host)", mediaOrigin, ghesOrigin)
 	}
 }
 
 func TestUploadCloudFlow_UsesRefererPageURLConsistently(t *testing.T) {
-	tmpFile := t.TempDir() + "/probe.dmp"
-	if err := os.WriteFile(tmpFile, []byte("probe"), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
+	tmpFile := writeProbeFile(t, "probe.dmp")
 
-	var policiesReferer, uploadReferer, uploadOrigin, finalizeReferer string
-	var finalizeFetchNonce, finalizeClientVersion string
-	var policiesContentType, uploadContentType string
+	var policyReferer, storageReferer, storageOrigin, completionReferer string
+	var completionFetchNonce, completionClientVersion string
+	var policyContentType, storageContentType string
 
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
@@ -435,25 +439,25 @@ func TestUploadCloudFlow_UsesRefererPageURLConsistently(t *testing.T) {
 
 	const refererURL = "issues/new-referer" // sentinel; real value set below once server.URL is known
 
-	mux.HandleFunc("/upload/policies/assets", func(w http.ResponseWriter, r *http.Request) {
-		policiesReferer = r.Header.Get("Referer")
+	mux.HandleFunc("POST /upload/policies/assets", func(w http.ResponseWriter, r *http.Request) {
+		policyReferer = r.Header.Get("Referer")
 		if err := r.ParseMultipartForm(1 << 20); err != nil {
 			t.Fatalf("ParseMultipartForm() error = %v", err)
 		}
-		policiesContentType = r.FormValue("content_type")
+		policyContentType = r.FormValue("content_type")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"upload_url":"` + s3Server.URL + `/s3","form":{},"header":{},"asset_upload_url":"/upload/assets/1","asset_upload_authenticity_token":"final-token"}`))
 	})
-	s3Mux.HandleFunc("/s3", func(w http.ResponseWriter, r *http.Request) {
-		uploadReferer = r.Header.Get("Referer")
-		uploadOrigin = r.Header.Get("Origin")
-		uploadContentType = r.Header.Get("X-File-Content-Type")
+	s3Mux.HandleFunc("POST /s3", func(w http.ResponseWriter, r *http.Request) {
+		storageReferer = r.Header.Get("Referer")
+		storageOrigin = r.Header.Get("Origin")
+		storageContentType = r.Header.Get("X-File-Content-Type")
 		w.WriteHeader(http.StatusNoContent)
 	})
-	mux.HandleFunc("/upload/assets/1", func(w http.ResponseWriter, r *http.Request) {
-		finalizeReferer = r.Header.Get("Referer")
-		finalizeFetchNonce = r.Header.Get("X-Fetch-Nonce")
-		finalizeClientVersion = r.Header.Get("X-GitHub-Client-Version")
+	mux.HandleFunc("PUT /upload/assets/1", func(w http.ResponseWriter, r *http.Request) {
+		completionReferer = r.Header.Get("Referer")
+		completionFetchNonce = r.Header.Get("X-Fetch-Nonce")
+		completionClientVersion = r.Header.Get("X-GitHub-Client-Version")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"id":1,"href":"https://github.test/user-attachments/assets/final"}`))
 	})
@@ -472,27 +476,241 @@ func TestUploadCloudFlow_UsesRefererPageURLConsistently(t *testing.T) {
 	if asset.Href != "https://github.test/user-attachments/assets/final" {
 		t.Fatalf("asset.Href = %q", asset.Href)
 	}
-	if policiesContentType != "" || uploadContentType != "" {
-		t.Fatalf("content types = (%q, %q), want both empty", policiesContentType, uploadContentType)
+	if policyContentType != "" || storageContentType != "" {
+		t.Fatalf("content types = (%q, %q), want both empty", policyContentType, storageContentType)
 	}
 
 	for label, got := range map[string]string{
-		"policies Referer": policiesReferer,
-		"upload Referer":   uploadReferer,
-		"finalize Referer": finalizeReferer,
+		"policy Referer":     policyReferer,
+		"storage Referer":    storageReferer,
+		"completion Referer": completionReferer,
 	} {
 		if got != refererPage.URL {
 			t.Fatalf("%s = %q, want %q (all three steps should use the same referer page URL)", label, got, refererPage.URL)
 		}
 	}
 	// S3 is a different host, so Origin must reflect the initiating host, not S3's.
-	if serverOrigin := mustOrigin(t, server.URL); uploadOrigin != serverOrigin {
-		t.Fatalf("upload Origin = %q, want %q (the initiating host, not S3's)", uploadOrigin, serverOrigin)
+	if serverOrigin := mustOrigin(t, server.URL); storageOrigin != serverOrigin {
+		t.Fatalf("storage Origin = %q, want %q (the initiating host, not S3's)", storageOrigin, serverOrigin)
 	}
-	if finalizeFetchNonce != "nonce-xyz" {
-		t.Fatalf("finalize X-Fetch-Nonce = %q, want %q", finalizeFetchNonce, "nonce-xyz")
+	if completionFetchNonce != "nonce-xyz" {
+		t.Fatalf("completion X-Fetch-Nonce = %q, want %q", completionFetchNonce, "nonce-xyz")
 	}
-	if finalizeClientVersion != "v1" {
-		t.Fatalf("finalize X-GitHub-Client-Version = %q, want %q", finalizeClientVersion, "v1")
+	if completionClientVersion != "v1" {
+		t.Fatalf("completion X-GitHub-Client-Version = %q, want %q", completionClientVersion, "v1")
+	}
+}
+
+// uploadStub serves policy -> storage -> completion and records what each flow sent.
+type uploadStub struct {
+	server      *httptest.Server
+	storageBody string
+	requests    []string
+	authToken   string // policy authenticity_token field
+	fetchNonce  string // policy X-Fetch-Nonce header
+}
+
+func newUploadStub(t *testing.T, withCompletion bool, completionStatus int) *uploadStub {
+	t.Helper()
+
+	stub := &uploadStub{storageBody: `{"id":1,"href":"https://github.test/storage"}`}
+	mux := http.NewServeMux()
+	stub.server = httptest.NewServer(mux)
+	t.Cleanup(stub.server.Close)
+
+	record := func(r *http.Request) { stub.requests = append(stub.requests, r.Method+" "+r.URL.Path) }
+	mux.HandleFunc("POST /upload/policies/assets", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		stub.authToken = r.FormValue("authenticity_token")
+		stub.fetchNonce = r.Header.Get("X-Fetch-Nonce")
+		completion := ""
+		if withCompletion {
+			completion = `,"asset_upload_url":"/upload/assets/1"`
+		}
+		_, _ = w.Write([]byte(`{"upload_url":"` + stub.server.URL + `/storage","form":{},"header":{}` + completion + `}`))
+	})
+	mux.HandleFunc("POST /storage", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		_, _ = w.Write([]byte(stub.storageBody))
+	})
+	mux.HandleFunc("PUT /upload/assets/1", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		w.WriteHeader(completionStatus)
+		_, _ = w.Write([]byte(`{"id":1,"href":"https://github.test/completion"}`))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		w.WriteHeader(http.StatusNotFound)
+	})
+	return stub
+}
+
+func TestUpload_RoutesByDeploymentAndUploadForm(t *testing.T) {
+	const (
+		policy     = "POST /upload/policies/assets"
+		storage    = "POST /storage"
+		completion = "PUT /upload/assets/1"
+	)
+
+	tests := []struct {
+		name           string
+		enterprise     bool
+		form           uploadForm
+		wantRequests   []string
+		wantAuthToken  string
+		wantFetchNonce string
+		wantHref       string
+		wantErr        bool
+	}{
+		{
+			name:           "github.com ignores the upload form",
+			form:           uploadFormFileAttachment,
+			wantRequests:   []string{policy, storage, completion},
+			wantFetchNonce: "nonce-123",
+			wantHref:       "https://github.test/completion",
+		},
+		{
+			name:          "ghes file-attachment form",
+			enterprise:    true,
+			form:          uploadFormFileAttachment,
+			wantRequests:  []string{policy, storage},
+			wantAuthToken: "page-token",
+			wantHref:      "https://github.test/storage",
+		},
+		{
+			name:           "ghes CommentBox form",
+			enterprise:     true,
+			form:           uploadFormCommentBox,
+			wantRequests:   []string{policy, storage, completion},
+			wantFetchNonce: "nonce-123",
+			wantHref:       "https://github.test/completion",
+		},
+		{
+			name:       "ghes unknown form fails before any request",
+			enterprise: true,
+			form:       uploadFormUnknown,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stub := newUploadStub(t, true, http.StatusOK)
+			u := newTestUploader(stub.server, tt.enterprise)
+
+			// The page carries both CSRF contexts so each flow must pick its own.
+			asset, err := u.Upload(t.Context(), writeProbeFile(t, "probe.png"), &RefererPage{
+				URL:  stub.server.URL + "/owner/repo/issues/new",
+				Meta: refererPageMetadata{AuthenticityToken: "page-token", FetchNonce: "nonce-123", UploadForm: tt.form},
+			}, 1)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Upload() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !slices.Equal(stub.requests, tt.wantRequests) {
+				t.Fatalf("requests = %q, want %q", stub.requests, tt.wantRequests)
+			}
+			if stub.authToken != tt.wantAuthToken || stub.fetchNonce != tt.wantFetchNonce {
+				t.Fatalf("policy (authenticity_token, X-Fetch-Nonce) = (%q, %q), want (%q, %q)", stub.authToken, stub.fetchNonce, tt.wantAuthToken, tt.wantFetchNonce)
+			}
+			if asset.Href != tt.wantHref {
+				t.Fatalf("asset.Href = %q, want %q", asset.Href, tt.wantHref)
+			}
+		})
+	}
+}
+
+func TestUploadEnterprise_PicksStoredOrCompletedAsset(t *testing.T) {
+	tests := []struct {
+		name             string
+		form             uploadForm
+		noStorageHref    bool
+		withCompletion   bool
+		completionStatus int
+		wantRequests     int
+		wantHref         string
+		wantErr          error
+	}{
+		{
+			name:          "file-attachment needs the stored href",
+			form:          uploadFormFileAttachment,
+			noStorageHref: true,
+			wantRequests:  2,
+			wantErr:       errMissingHref,
+		},
+		{
+			name:         "comment box without asset_upload_url skips completion",
+			form:         uploadFormCommentBox,
+			wantRequests: 2,
+			wantHref:     "https://github.test/storage",
+		},
+		{
+			name:             "comment box falls back to the stored href when completion fails",
+			form:             uploadFormCommentBox,
+			withCompletion:   true,
+			completionStatus: http.StatusInternalServerError,
+			wantRequests:     3,
+			wantHref:         "https://github.test/storage",
+		},
+		{
+			name:             "comment box completion covers a storage response without href",
+			form:             uploadFormCommentBox,
+			noStorageHref:    true,
+			withCompletion:   true,
+			completionStatus: http.StatusOK,
+			wantRequests:     3,
+			wantHref:         "https://github.test/completion",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stub := newUploadStub(t, tt.withCompletion, tt.completionStatus)
+			if tt.noStorageHref {
+				stub.storageBody = "" // like S3: no JSON asset
+			}
+			u := newTestUploader(stub.server, true)
+
+			asset, err := u.Upload(t.Context(), writeProbeFile(t, "probe.png"), &RefererPage{
+				URL:  stub.server.URL + "/owner/repo/issues/new",
+				Meta: refererPageMetadata{AuthenticityToken: "page-token", FetchNonce: "nonce-123", UploadForm: tt.form},
+			}, 1)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Upload() error = %v, want %v", err, tt.wantErr)
+			}
+			if len(stub.requests) != tt.wantRequests {
+				t.Fatalf("requests = %q, want %d", stub.requests, tt.wantRequests)
+			}
+			if asset.Href != tt.wantHref {
+				t.Fatalf("asset.Href = %q, want %q", asset.Href, tt.wantHref)
+			}
+		})
+	}
+}
+
+func TestRequestStorage_SendsUploadTokenOnlyForSameOrigin(t *testing.T) {
+	for name, sameOrigin := range map[string]bool{"same origin": true, "cross origin": false} {
+		t.Run(name, func(t *testing.T) {
+			var authToken string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				authToken = r.FormValue("authenticity_token")
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer server.Close()
+
+			f := newTestUploadFile(&RefererPage{URL: server.URL + "/owner/repo/issues/new"})
+			f.path = writeProbeFile(t, "probe.png")
+			policy := policyResponse{UploadURL: server.URL + "/storage", UploadAuthenticityToken: "upload-token", SameOrigin: sameOrigin}
+
+			if _, err := newTestUploader(server, true).requestStorage(t.Context(), f, policy, server.URL+"/"); err != nil {
+				t.Fatalf("requestStorage() error = %v", err)
+			}
+			want := ""
+			if sameOrigin {
+				want = "upload-token"
+			}
+			if authToken != want {
+				t.Fatalf("authenticity_token = %q, want %q", authToken, want)
+			}
+		})
 	}
 }

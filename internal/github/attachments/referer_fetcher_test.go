@@ -65,6 +65,9 @@ func TestResolveRefererPage_UsesFirstSuccessfulFetcher(t *testing.T) {
 	if refererPage.Meta.RepositoryID != 777 {
 		t.Fatalf("refererPage.Meta.RepositoryID = %d, want %d", refererPage.Meta.RepositoryID, 777)
 	}
+	if refererPage.Meta.UploadForm != uploadFormFileAttachment {
+		t.Fatalf("refererPage.Meta.UploadForm = %d, want %d (token-only page)", refererPage.Meta.UploadForm, uploadFormFileAttachment)
+	}
 }
 
 type stubRefererPageFetcher struct {
@@ -138,6 +141,44 @@ func TestParseCSRFMetadata(t *testing.T) {
 	}
 	if meta.GitHubClientVersion != "release-1" {
 		t.Fatalf("GitHubClientVersion = %q, want %q", meta.GitHubClientVersion, "release-1")
+	}
+}
+
+func TestDetectUploadForm(t *testing.T) {
+	tests := []struct {
+		name string
+		html string
+		want uploadForm
+	}{
+		{
+			name: "file-attachment wins over fetch nonce and react partials",
+			html: `<react-partial></react-partial><file-attachment data-upload-repository-id="416" data-upload-policy-url="/upload/policies/assets">` +
+				`<meta name="fetch-nonce" content="nonce-1">`,
+			want: uploadFormFileAttachment,
+		},
+		{
+			name: "fetch nonce wins over an incidental token",
+			html: `<meta name="fetch-nonce" content="nonce-1"><meta name="csrf-token" content="csrf-1">`,
+			want: uploadFormCommentBox,
+		},
+		{
+			name: "token-only page keeps file-attachment",
+			html: `<react-partial></react-partial><input type="hidden" name="authenticity_token" value="form-token">`,
+			want: uploadFormFileAttachment,
+		},
+		{
+			name: "file-attachment without policy url and blank nonce are not upload context",
+			html: `<file-attachment data-upload-repository-id="416"></file-attachment><meta name="fetch-nonce" content=" ">`,
+			want: uploadFormUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := detectUploadForm(tt.html, parseCSRFMetadata(tt.html)); got != tt.want {
+				t.Fatalf("detectUploadForm() = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }
 
