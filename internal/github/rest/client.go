@@ -2,6 +2,7 @@ package rest
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -26,7 +27,7 @@ func NewService(host string, client RESTGetter) (*Service, error) {
 	}
 
 	if client == nil {
-		restClient, err := newRESTClient(host)
+		restClient, err := NewClient(host, "", nil)
 		if err != nil {
 			return nil, err
 		}
@@ -36,8 +37,8 @@ func NewService(host string, client RESTGetter) (*Service, error) {
 	return &Service{host: host, client: client}, nil
 }
 
-func newRESTClient(host string) (*goapi.RESTClient, error) {
-	opts := goapi.ClientOptions{Host: host, Timeout: requestTimeout}
+func NewClient(host, token string, transport http.RoundTripper) (*goapi.RESTClient, error) {
+	opts := goapi.ClientOptions{Host: host, AuthToken: token, Transport: transport, Timeout: requestTimeout}
 
 	if version := githubCLIAppVersion(); version != "" {
 		opts.Headers = map[string]string{"User-Agent": "GitHub CLI " + version}
