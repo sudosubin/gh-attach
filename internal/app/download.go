@@ -1,12 +1,15 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -16,6 +19,13 @@ import (
 )
 
 const bearerUserAgent = "gh-attach"
+
+var errDownloadAuthenticationRequired = errors.New("GitHub returned a sign-in or SSO page; sign in to GitHub and complete SSO in your browser, then retry")
+
+var (
+	authenticationBodyPattern = regexp.MustCompile(`(?i)<body\b[^>]*\sclass\s*=\s*["'][^"']*\bsession-authentication\b[^"']*["']`)
+	authenticationFormPattern = regexp.MustCompile(`(?i)<form\b[^>]*\saction\s*=\s*["'](?:https://[^/"']+)?/(?:sessions?|login|(?:orgs|enterprises)/[^/"'?#]+/(?:sso|saml/initiate))(?:\?[^"']*)?["']`)
+)
 
 type DownloadRequest struct {
 	URL             string
@@ -57,11 +67,11 @@ func (s *Service) Download(ctx context.Context, req DownloadRequest) (io.ReadClo
 	}
 
 	token, _ := auth.TokenForHost(host)
-	body, status, downloadErr := s.downloadResponse(ctx, attachmentURL, web.Session{UserAgent: bearerUserAgent}, token)
+	body, downloadErr := s.download(ctx, attachmentURL, web.Session{UserAgent: bearerUserAgent}, token)
 	if downloadErr == nil {
 		return body, nil
 	}
-	if !shouldRetryWithCookies(status) {
+	if !shouldRetryWithCookies(downloadErr) {
 		return nil, downloadErr
 	}
 	return s.retryWithBrowserCookies(ctx, attachmentURL, host, req, downloadErr)
@@ -156,19 +166,9 @@ func (s *Service) download(
 	session web.Session,
 	token string,
 ) (io.ReadCloser, error) {
-	body, _, err := s.downloadResponse(ctx, attachmentURL, session, token)
-	return body, err
-}
-
-func (s *Service) downloadResponse(
-	ctx context.Context,
-	attachmentURL string,
-	session web.Session,
-	token string,
-) (io.ReadCloser, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, attachmentURL, nil)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -176,18 +176,54 @@ func (s *Service) downloadResponse(
 
 	resp, err := web.NewClient(s.httpClient, session.UserAgent, session.Cookies).Do(req)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if resp.StatusCode == http.StatusOK {
-		return resp.Body, resp.StatusCode, nil
+		if err := checkDownloadAuthentication(resp); err != nil {
+			_ = resp.Body.Close()
+			return nil, err
+		}
+		return resp.Body, nil
 	}
 
-	status := resp.StatusCode
 	err = api.HandleHTTPError(resp)
 	_ = resp.Body.Close()
-	return nil, status, err
+	return nil, err
 }
 
-func shouldRetryWithCookies(status int) bool {
-	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusNotFound
+func checkDownloadAuthentication(resp *http.Response) error {
+	contentType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	disposition, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
+	if (contentType != "text/html" && contentType != "application/xhtml+xml") || disposition == "attachment" {
+		return nil
+	}
+	if _, known := knownAuthHost(resp.Request.URL.Host); !known {
+		return nil
+	}
+
+	// GitHub can serve a sign-in or SSO page as HTTP 200 at the attachment URL.
+	const prefixSize = 64 * 1024
+	reader := bufio.NewReaderSize(resp.Body, prefixSize)
+	prefix, err := reader.Peek(prefixSize)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("inspect download response: %w", err)
+	}
+	if authenticationBodyPattern.Match(prefix) && authenticationFormPattern.Match(prefix) {
+		return errDownloadAuthenticationRequired
+	}
+	resp.Body = struct {
+		io.Reader
+		io.Closer
+	}{Reader: reader, Closer: resp.Body}
+	return nil
+}
+
+func shouldRetryWithCookies(err error) bool {
+	if errors.Is(err, errDownloadAuthenticationRequired) {
+		return true
+	}
+	if httpErr, ok := errors.AsType[*api.HTTPError](err); ok {
+		return httpErr.StatusCode == http.StatusUnauthorized || httpErr.StatusCode == http.StatusForbidden || httpErr.StatusCode == http.StatusNotFound
+	}
+	return false
 }
