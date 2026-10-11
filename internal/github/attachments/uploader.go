@@ -192,7 +192,7 @@ func (u *Uploader) uploadCloudFlow(ctx context.Context, f uploadFile) (Asset, er
 		return Asset{}, err
 	}
 
-	storedAsset, err := u.requestStorageCloud(ctx, f, policy, f.refererPage.URL)
+	storedAsset, err := u.requestStorage(ctx, f, policy, f.refererPage.URL)
 	if err != nil {
 		return Asset{}, err
 	}
@@ -221,7 +221,15 @@ func (u *Uploader) uploadEnterpriseFileAttachmentFlow(ctx context.Context, f upl
 	if err != nil {
 		return Asset{}, err
 	}
-	return u.requestStorageEnterprise(ctx, f, policy, u.baseURL+"/")
+
+	storedAsset, err := u.requestStorage(ctx, f, policy, u.baseURL+"/")
+	if err != nil {
+		return Asset{}, err
+	}
+	if storedAsset.Href == "" {
+		return Asset{}, errMissingHref
+	}
+	return storedAsset, nil
 }
 
 // uploadEnterpriseCommentBoxFlow is GHES's CommentBox upload: policy -> storage -> completion if requested.
@@ -231,20 +239,25 @@ func (u *Uploader) uploadEnterpriseCommentBoxFlow(ctx context.Context, f uploadF
 		return Asset{}, err
 	}
 
-	storedAsset, err := u.requestStorageEnterprise(ctx, f, policy, u.baseURL+"/")
+	storedAsset, err := u.requestStorage(ctx, f, policy, u.baseURL+"/")
 	if err != nil {
 		return Asset{}, err
 	}
 	if policy.AssetUploadURL == "" {
+		if storedAsset.Href == "" {
+			return Asset{}, errMissingHref
+		}
 		return storedAsset, nil
 	}
 
-	// The storage response's href is already usable, so a failed completion isn't fatal.
 	asset, err := u.requestCompletion(ctx, f, policy)
-	if err != nil || asset.Href == "" {
-		return storedAsset, nil
+	if err == nil && asset.Href != "" {
+		return asset, nil
 	}
-	return asset, nil
+	if storedAsset.Href != "" {
+		return storedAsset, nil // a failed completion isn't fatal once storage returned a usable href
+	}
+	return Asset{}, cmp.Or(err, errMissingHref)
 }
 
 // requestPolicyCommentBox authenticates via X-Fetch-Nonce/X-GitHub-Client-Version, never authenticity_token.
@@ -313,41 +326,13 @@ func (u *Uploader) requestPolicy(ctx context.Context, f uploadFile, fields, head
 	return out, nil
 }
 
-// requestStorageCloud POSTs to the S3 presigned URL; an empty/unparsable body isn't an error since requestCompletion fills in the asset.
-func (u *Uploader) requestStorageCloud(ctx context.Context, f uploadFile, policy policyResponse, refererURL string) (Asset, error) {
-	headers := make(map[string]string, len(policy.Header)+1)
-	if f.contentType != "" {
-		headers["X-File-Content-Type"] = f.contentType
-	}
-	maps.Copy(headers, policy.Header)
+var errMissingHref = errors.New("upload response missing href")
 
-	body, err := u.client.DoMultipart(ctx, web.Request{
-		Method:   http.MethodPost,
-		URL:      policy.UploadURL,
-		Fields:   policy.Form,
-		Headers:  headers,
-		FilePath: f.path,
-		Referer:  refererURL,
-	})
-	if err != nil {
-		return Asset{}, err
-	}
-	if len(body) == 0 {
-		return Asset{}, nil
-	}
-
-	var asset Asset
-	if err := json.Unmarshal(body, &asset); err != nil {
-		return Asset{}, nil
-	}
-	return asset, nil
-}
-
-// requestStorageEnterprise POSTs to the media host; the response IS the finished asset, so a missing href is a real error.
-func (u *Uploader) requestStorageEnterprise(ctx context.Context, f uploadFile, policy policyResponse, refererURL string) (Asset, error) {
+// requestStorage POSTs the file to upload_url; same-origin storage (GHES media host) also takes upload_authenticity_token.
+func (u *Uploader) requestStorage(ctx context.Context, f uploadFile, policy policyResponse, refererURL string) (Asset, error) {
 	fields := make(map[string]string, len(policy.Form)+1)
 	maps.Copy(fields, policy.Form)
-	if policy.UploadAuthenticityToken != "" {
+	if policy.SameOrigin && policy.UploadAuthenticityToken != "" {
 		fields["authenticity_token"] = policy.UploadAuthenticityToken
 	}
 
@@ -369,12 +354,10 @@ func (u *Uploader) requestStorageEnterprise(ctx context.Context, f uploadFile, p
 		return Asset{}, err
 	}
 
+	// S3 answers without a JSON asset; flows decide whether they need one.
 	var asset Asset
-	if err := json.Unmarshal(body, &asset); err != nil {
-		return Asset{}, fmt.Errorf("enterprise storage response: %w", err)
-	}
-	if asset.Href == "" {
-		return Asset{}, fmt.Errorf("enterprise storage response missing href")
+	if json.Unmarshal(body, &asset) != nil {
+		return Asset{}, nil
 	}
 	return asset, nil
 }

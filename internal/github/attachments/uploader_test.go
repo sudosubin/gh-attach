@@ -1,6 +1,7 @@
 package attachments
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -502,16 +503,17 @@ func TestUploadCloudFlow_UsesRefererPageURLConsistently(t *testing.T) {
 
 // uploadStub serves policy -> storage -> completion and records what each flow sent.
 type uploadStub struct {
-	server     *httptest.Server
-	requests   []string
-	authToken  string // policy authenticity_token field
-	fetchNonce string // policy X-Fetch-Nonce header
+	server      *httptest.Server
+	storageBody string
+	requests    []string
+	authToken   string // policy authenticity_token field
+	fetchNonce  string // policy X-Fetch-Nonce header
 }
 
 func newUploadStub(t *testing.T, withCompletion bool, completionStatus int) *uploadStub {
 	t.Helper()
 
-	stub := &uploadStub{}
+	stub := &uploadStub{storageBody: `{"id":1,"href":"https://github.test/storage"}`}
 	mux := http.NewServeMux()
 	stub.server = httptest.NewServer(mux)
 	t.Cleanup(stub.server.Close)
@@ -529,7 +531,7 @@ func newUploadStub(t *testing.T, withCompletion bool, completionStatus int) *upl
 	})
 	mux.HandleFunc("POST /storage", func(w http.ResponseWriter, r *http.Request) {
 		record(r)
-		_, _ = w.Write([]byte(`{"id":1,"href":"https://github.test/storage"}`))
+		_, _ = w.Write([]byte(stub.storageBody))
 	})
 	mux.HandleFunc("PUT /upload/assets/1", func(w http.ResponseWriter, r *http.Request) {
 		record(r)
@@ -617,34 +619,97 @@ func TestUpload_RoutesByDeploymentAndUploadForm(t *testing.T) {
 	}
 }
 
-func TestUploadEnterpriseCommentBoxFlow_KeepsStoredAssetWithoutCompletion(t *testing.T) {
+func TestUploadEnterprise_PicksStoredOrCompletedAsset(t *testing.T) {
 	tests := []struct {
 		name             string
+		form             uploadForm
+		noStorageHref    bool
 		withCompletion   bool
 		completionStatus int
 		wantRequests     int
+		wantHref         string
+		wantErr          error
 	}{
-		{name: "no asset_upload_url skips completion", wantRequests: 2},
-		{name: "failed completion falls back", withCompletion: true, completionStatus: http.StatusInternalServerError, wantRequests: 3},
+		{
+			name:          "file-attachment needs the stored href",
+			form:          uploadFormFileAttachment,
+			noStorageHref: true,
+			wantRequests:  2,
+			wantErr:       errMissingHref,
+		},
+		{
+			name:         "comment box without asset_upload_url skips completion",
+			form:         uploadFormCommentBox,
+			wantRequests: 2,
+			wantHref:     "https://github.test/storage",
+		},
+		{
+			name:             "comment box falls back to the stored href when completion fails",
+			form:             uploadFormCommentBox,
+			withCompletion:   true,
+			completionStatus: http.StatusInternalServerError,
+			wantRequests:     3,
+			wantHref:         "https://github.test/storage",
+		},
+		{
+			name:             "comment box completion covers a storage response without href",
+			form:             uploadFormCommentBox,
+			noStorageHref:    true,
+			withCompletion:   true,
+			completionStatus: http.StatusOK,
+			wantRequests:     3,
+			wantHref:         "https://github.test/completion",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			stub := newUploadStub(t, tt.withCompletion, tt.completionStatus)
+			if tt.noStorageHref {
+				stub.storageBody = "" // like S3: no JSON asset
+			}
 			u := newTestUploader(stub.server, true)
 
 			asset, err := u.Upload(t.Context(), writeProbeFile(t, "probe.png"), &RefererPage{
 				URL:  stub.server.URL + "/owner/repo/issues/new",
-				Meta: refererPageMetadata{FetchNonce: "nonce-123", UploadForm: uploadFormCommentBox},
+				Meta: refererPageMetadata{AuthenticityToken: "page-token", FetchNonce: "nonce-123", UploadForm: tt.form},
 			}, 1)
-			if err != nil {
-				t.Fatalf("Upload() error = %v", err)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Upload() error = %v, want %v", err, tt.wantErr)
 			}
 			if len(stub.requests) != tt.wantRequests {
 				t.Fatalf("requests = %q, want %d", stub.requests, tt.wantRequests)
 			}
-			if asset.Href != "https://github.test/storage" {
-				t.Fatalf("asset.Href = %q, want the storage response's href", asset.Href)
+			if asset.Href != tt.wantHref {
+				t.Fatalf("asset.Href = %q, want %q", asset.Href, tt.wantHref)
+			}
+		})
+	}
+}
+
+func TestRequestStorage_SendsUploadTokenOnlyForSameOrigin(t *testing.T) {
+	for name, sameOrigin := range map[string]bool{"same origin": true, "cross origin": false} {
+		t.Run(name, func(t *testing.T) {
+			var authToken string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				authToken = r.FormValue("authenticity_token")
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer server.Close()
+
+			f := newTestUploadFile(&RefererPage{URL: server.URL + "/owner/repo/issues/new"})
+			f.path = writeProbeFile(t, "probe.png")
+			policy := policyResponse{UploadURL: server.URL + "/storage", UploadAuthenticityToken: "upload-token", SameOrigin: sameOrigin}
+
+			if _, err := newTestUploader(server, true).requestStorage(t.Context(), f, policy, server.URL+"/"); err != nil {
+				t.Fatalf("requestStorage() error = %v", err)
+			}
+			want := ""
+			if sameOrigin {
+				want = "upload-token"
+			}
+			if authToken != want {
+				t.Fatalf("authenticity_token = %q, want %q", authToken, want)
 			}
 		})
 	}
