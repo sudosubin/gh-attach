@@ -80,7 +80,9 @@ $ gh attach download https://github.com/user-attachments/assets/550e8400-e29b-41
 $ gh attach download https://github.com/user-attachments/files/123/report.pdf -O -
 ```
 
-Downloads use an explicit session token or browser selection first. Otherwise they use the active `gh` authentication token and retry with the matching browser cookies after an authorization failure.
+Downloads use an explicit session token or browser selection first. Otherwise they use the active `gh` authentication token and retry with the matching browser cookies after an authorization failure, including GitHub sign-in or SSO pages returned with HTTP 200.
+
+If browser authentication still returns a sign-in or SSO page, the download fails before writing the output. Sign in to GitHub and complete SSO in the selected browser, then retry.
 
 ## Use with AI agents
 
