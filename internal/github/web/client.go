@@ -26,19 +26,6 @@ type Session struct {
 	UserAgent string
 }
 
-func NewClient(httpClient *http.Client, userAgent string, cookies []*http.Cookie) *Client {
-	if httpClient == nil {
-		httpClient = &http.Client{}
-	}
-
-	c := &Client{userAgent: userAgent}
-	wrapped := *httpClient
-	wrapped.CheckRedirect = c.checkRedirect
-	wrapped.Jar = newScopedCookieJar(cookies)
-	c.httpClient = &wrapped
-	return c
-}
-
 // Request is a pure description of one multipart HTTP call's shape; DoMultipart turns it into an actual request.
 type Request struct {
 	Method   string
@@ -49,39 +36,48 @@ type Request struct {
 	Referer  string // non-empty applies setDefaultHeaders(req, referer)
 }
 
+func NewClient(httpClient *http.Client, userAgent string, cookies []*http.Cookie) *Client {
+	if httpClient == nil {
+		httpClient = &http.Client{}
+	}
+
+	c := &Client{userAgent: userAgent}
+	wrapped := new(*httpClient)
+	wrapped.CheckRedirect = c.checkRedirect
+	wrapped.Jar = newScopedCookieJar(cookies)
+	c.httpClient = wrapped
+	return c
+}
+
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("User-Agent", c.userAgent)
 	return c.httpClient.Do(req)
 }
 
-type multipartPayload struct {
-	data          []byte
-	filePath      string
-	prefixLength  int
-	contentLength int64
-	contentType   string
-}
-
-func (p multipartPayload) open() (io.ReadCloser, error) {
-	if p.filePath == "" {
-		return io.NopCloser(bytes.NewReader(p.data)), nil
-	}
-
-	file, err := os.Open(p.filePath)
+// Get issues a plain GET; non-2xx is reported via statusCode, not err — only a transport failure is an error.
+func (c *Client) Get(ctx context.Context, pageURL string) (body []byte, statusCode int, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return struct {
-		io.Reader
-		io.Closer
-	}{
-		Reader: io.MultiReader(
-			bytes.NewReader(p.data[:p.prefixLength]),
-			file,
-			bytes.NewReader(p.data[p.prefixLength:]),
-		),
-		Closer: file,
-	}, nil
+	if err := setDefaultHeaders(req, pageURL); err != nil {
+		return nil, 0, err
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, resp.StatusCode, nil
+	}
+
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return body, resp.StatusCode, nil
 }
 
 // DoMultipart streams the multipart body, applies headers/cookie/user-agent, and returns the response body.
@@ -124,6 +120,14 @@ func (c *Client) DoMultipart(ctx context.Context, req Request) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
+type multipartPayload struct {
+	data          []byte
+	filePath      string
+	prefixLength  int
+	contentLength int64
+	contentType   string
+}
+
 func newMultipartPayload(fields map[string]string, filePath string) (multipartPayload, error) {
 	var envelope bytes.Buffer
 	writer := multipart.NewWriter(&envelope)
@@ -158,30 +162,26 @@ func newMultipartPayload(fields map[string]string, filePath string) (multipartPa
 	}, nil
 }
 
-// Get issues a plain GET; non-2xx is reported via statusCode, not err — only a transport failure is an error.
-func (c *Client) Get(ctx context.Context, pageURL string) (body []byte, statusCode int, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
-	if err != nil {
-		return nil, 0, err
-	}
-	if err := setDefaultHeaders(req, pageURL); err != nil {
-		return nil, 0, err
-	}
-	resp, err := c.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, resp.StatusCode, nil
+func (p multipartPayload) open() (io.ReadCloser, error) {
+	if p.filePath == "" {
+		return io.NopCloser(bytes.NewReader(p.data)), nil
 	}
 
-	body, err = io.ReadAll(resp.Body)
+	file, err := os.Open(p.filePath)
 	if err != nil {
-		return nil, resp.StatusCode, err
+		return nil, err
 	}
-	return body, resp.StatusCode, nil
+	return struct {
+		io.Reader
+		io.Closer
+	}{
+		Reader: io.MultiReader(
+			bytes.NewReader(p.data[:p.prefixLength]),
+			file,
+			bytes.NewReader(p.data[p.prefixLength:]),
+		),
+		Closer: file,
+	}, nil
 }
 
 func setDefaultHeaders(req *http.Request, referer string) error {

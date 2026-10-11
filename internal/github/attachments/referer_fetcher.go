@@ -17,12 +17,25 @@ type RefererPage struct {
 	Meta refererPageMetadata
 }
 
-type RefererPageFetcher interface {
-	Fetch(ctx context.Context, client *web.Client) (*RefererPage, error)
+type refererPageMetadata struct {
+	RepositoryID        int64
+	AuthenticityToken   string
+	FetchNonce          string
+	GitHubClientVersion string
+	UploadForm          uploadForm
 }
 
-func NewIssueNewPageFetcher(host string, repoFullName string) RefererPageFetcher {
-	return issueNewPageFetcher{host: host, repoFullName: repoFullName}
+// uploadForm is the uploader a referer page renders: <file-attachment> (GHES 3.17) or CommentBox (github.com, newer GHES).
+type uploadForm int
+
+const (
+	uploadFormUnknown uploadForm = iota
+	uploadFormFileAttachment
+	uploadFormCommentBox
+)
+
+type RefererPageFetcher interface {
+	Fetch(ctx context.Context, client *web.Client) (*RefererPage, error)
 }
 
 type issueNewPageFetcher struct {
@@ -30,18 +43,22 @@ type issueNewPageFetcher struct {
 	repoFullName string
 }
 
+func NewIssueNewPageFetcher(host string, repoFullName string) RefererPageFetcher {
+	return issueNewPageFetcher{host: host, repoFullName: repoFullName}
+}
+
 func (f issueNewPageFetcher) Fetch(ctx context.Context, client *web.Client) (*RefererPage, error) {
 	pageURL := fmt.Sprintf("https://%s/%s/issues/new", f.host, f.repoFullName)
 	return fetchAndParse(ctx, client, pageURL)
 }
 
-func NewCommitHeadPageFetcher(host string, repoFullName string) RefererPageFetcher {
-	return commitHeadPageFetcher{host: host, repoFullName: repoFullName}
-}
-
 type commitHeadPageFetcher struct {
 	host         string
 	repoFullName string
+}
+
+func NewCommitHeadPageFetcher(host string, repoFullName string) RefererPageFetcher {
+	return commitHeadPageFetcher{host: host, repoFullName: repoFullName}
 }
 
 func (f commitHeadPageFetcher) Fetch(ctx context.Context, client *web.Client) (*RefererPage, error) {
@@ -65,23 +82,6 @@ func fetchAndParse(ctx context.Context, client *web.Client, pageURL string) (*Re
 	meta.UploadForm = detectUploadForm(html, meta)
 	return &RefererPage{URL: pageURL, Meta: meta}, nil
 }
-
-type refererPageMetadata struct {
-	RepositoryID        int64
-	AuthenticityToken   string
-	FetchNonce          string
-	GitHubClientVersion string
-	UploadForm          uploadForm
-}
-
-// uploadForm is the uploader a referer page renders: <file-attachment> (GHES 3.17) or CommentBox (github.com, newer GHES).
-type uploadForm int
-
-const (
-	uploadFormUnknown uploadForm = iota
-	uploadFormFileAttachment
-	uploadFormCommentBox
-)
 
 var fileAttachmentPattern = regexp.MustCompile(`<file-attachment\b[^>]*\bdata-upload-policy-url=["']`)
 

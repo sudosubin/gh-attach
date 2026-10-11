@@ -38,8 +38,7 @@ func containerMatches(sel cookies.ProfileSelector, ct libsweetcookie.Container) 
 }
 
 func finalizeContainerGroups(groups map[containerGroupKey][]*http.Cookie) []CookieSet {
-	keys := slices.Collect(maps.Keys(groups))
-	slices.SortFunc(keys, func(a, b containerGroupKey) int {
+	keys := slices.SortedFunc(maps.Keys(groups), func(a, b containerGroupKey) int {
 		return cmp.Or(
 			cmp.Compare(a.Profile, b.Profile),
 			cmp.Compare(a.ContainerID, b.ContainerID),
