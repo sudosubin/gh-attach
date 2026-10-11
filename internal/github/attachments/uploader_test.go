@@ -29,6 +29,10 @@ func writeProbeFile(t *testing.T, name string) string {
 	return path
 }
 
+func newTestUploadFile(refererPage *RefererPage) uploadFile {
+	return uploadFile{name: "file.txt", size: 12, contentType: "text/plain", repositoryID: 1, refererPage: refererPage}
+}
+
 func TestContentTypeForFile(t *testing.T) {
 	tests := map[string]string{
 		".bmp":  "image/bmp",
@@ -153,7 +157,7 @@ func TestRequestPolicy_InjectsRefererAndUploadHeaders(t *testing.T) {
 		Meta: refererPageMetadata{FetchNonce: "nonce-123", GitHubClientVersion: "1.2.3"},
 	}
 
-	_, err := u.requestPolicyCommentBox(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicyCommentBox(t.Context(), newTestUploadFile(refererPage))
 	if err != nil {
 		t.Fatalf("requestPolicyCommentBox() error = %v", err)
 	}
@@ -192,7 +196,7 @@ func TestRequestPolicy_DoesNotInjectOptionalHeadersWhenMetaMissing(t *testing.T)
 		Meta: refererPageMetadata{},
 	}
 
-	_, err := u.requestPolicyCommentBox(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicyCommentBox(t.Context(), newTestUploadFile(refererPage))
 	if err != nil {
 		t.Fatalf("requestPolicyCommentBox() error = %v", err)
 	}
@@ -226,7 +230,7 @@ func TestRequestPolicyCommentBox_IgnoresAuthenticityTokenOnPage(t *testing.T) {
 		Meta: refererPageMetadata{AuthenticityToken: "incidental-token", FetchNonce: "nonce-123"},
 	}
 
-	_, err := u.requestPolicyCommentBox(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicyCommentBox(t.Context(), newTestUploadFile(refererPage))
 	if err != nil {
 		t.Fatalf("requestPolicyCommentBox() error = %v", err)
 	}
@@ -262,7 +266,7 @@ func TestRequestPolicyFileAttachment_SendsAuthTokenAndVerifiedFetch(t *testing.T
 		Meta: refererPageMetadata{AuthenticityToken: "ghes-token", FetchNonce: "nonce-123", GitHubClientVersion: "1.2.3"},
 	}
 
-	_, err := u.requestPolicyFileAttachment(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicyFileAttachment(t.Context(), newTestUploadFile(refererPage))
 	if err != nil {
 		t.Fatalf("requestPolicyFileAttachment() error = %v", err)
 	}
@@ -290,7 +294,7 @@ func TestRequestPolicyFileAttachment_FailsFastWhenAuthTokenMissing(t *testing.T)
 		Meta: refererPageMetadata{},
 	}
 
-	_, err := u.requestPolicyFileAttachment(t.Context(), refererPage, 1, "file.txt", 12, "text/plain")
+	_, err := u.requestPolicyFileAttachment(t.Context(), newTestUploadFile(refererPage))
 	if err == nil {
 		t.Fatal("requestPolicyFileAttachment() error = nil, want an error")
 	}

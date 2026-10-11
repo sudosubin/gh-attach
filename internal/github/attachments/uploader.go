@@ -142,25 +142,42 @@ func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *Ref
 	}
 
 	fileName := filepath.Base(filePath)
-	contentType := contentTypeForFile(fileName)
+	f := uploadFile{
+		path:         filePath,
+		name:         fileName,
+		size:         fileInfo.Size(),
+		contentType:  contentTypeForFile(fileName),
+		repositoryID: repositoryID,
+		refererPage:  refererPage,
+	}
 
 	var asset Asset
 	switch {
 	case !u.isEnterprise:
-		asset, err = u.uploadCloudFlow(ctx, filePath, refererPage, repositoryID, fileName, fileInfo.Size(), contentType)
+		asset, err = u.uploadCloudFlow(ctx, f)
 	case refererPage.Meta.UploadForm == uploadFormFileAttachment:
-		asset, err = u.uploadEnterpriseFileAttachmentFlow(ctx, filePath, refererPage, repositoryID, fileName, fileInfo.Size(), contentType)
+		asset, err = u.uploadEnterpriseFileAttachmentFlow(ctx, f)
 	case refererPage.Meta.UploadForm == uploadFormCommentBox:
-		asset, err = u.uploadEnterpriseCommentBoxFlow(ctx, filePath, refererPage, repositoryID, fileName, fileInfo.Size(), contentType)
+		asset, err = u.uploadEnterpriseCommentBoxFlow(ctx, f)
 	default:
 		err = fmt.Errorf("unrecognized upload form on %s", refererPage.URL)
 	}
 	if err != nil {
 		return Asset{}, err
 	}
-	asset.Name = cmp.Or(asset.Name, fileName)
-	asset.ContentType = cmp.Or(asset.ContentType, contentType)
+	asset.Name = cmp.Or(asset.Name, f.name)
+	asset.ContentType = cmp.Or(asset.ContentType, f.contentType)
 	return asset, nil
+}
+
+// uploadFile is one file's upload context, built once by Upload and passed through every step.
+type uploadFile struct {
+	path         string
+	name         string
+	size         int64
+	contentType  string
+	repositoryID int64
+	refererPage  *RefererPage
 }
 
 func contentTypeForFile(fileName string) string {
@@ -169,18 +186,18 @@ func contentTypeForFile(fileName string) string {
 }
 
 // uploadCloudFlow is github.com's upload: policy -> storage (S3) -> completion.
-func (u *Uploader) uploadCloudFlow(ctx context.Context, filePath string, refererPage *RefererPage, repositoryID int64, fileName string, fileSize int64, contentType string) (Asset, error) {
-	policy, err := u.requestPolicyCommentBox(ctx, refererPage, repositoryID, fileName, fileSize, contentType)
+func (u *Uploader) uploadCloudFlow(ctx context.Context, f uploadFile) (Asset, error) {
+	policy, err := u.requestPolicyCommentBox(ctx, f)
 	if err != nil {
 		return Asset{}, err
 	}
 
-	storedAsset, err := u.requestStorageCloud(ctx, filePath, contentType, policy, refererPage.URL)
+	storedAsset, err := u.requestStorageCloud(ctx, f, policy, f.refererPage.URL)
 	if err != nil {
 		return Asset{}, err
 	}
 
-	asset, err := u.requestCompletion(ctx, policy, refererPage)
+	asset, err := u.requestCompletion(ctx, f, policy)
 	if err != nil {
 		if storedAsset.Href != "" {
 			return storedAsset, nil
@@ -199,22 +216,22 @@ func (u *Uploader) uploadCloudFlow(ctx context.Context, filePath string, referer
 }
 
 // uploadEnterpriseFileAttachmentFlow is GHES's <file-attachment> upload: policy -> storage (no completion).
-func (u *Uploader) uploadEnterpriseFileAttachmentFlow(ctx context.Context, filePath string, refererPage *RefererPage, repositoryID int64, fileName string, fileSize int64, contentType string) (Asset, error) {
-	policy, err := u.requestPolicyFileAttachment(ctx, refererPage, repositoryID, fileName, fileSize, contentType)
+func (u *Uploader) uploadEnterpriseFileAttachmentFlow(ctx context.Context, f uploadFile) (Asset, error) {
+	policy, err := u.requestPolicyFileAttachment(ctx, f)
 	if err != nil {
 		return Asset{}, err
 	}
-	return u.requestStorageEnterprise(ctx, filePath, contentType, policy, u.baseURL+"/")
+	return u.requestStorageEnterprise(ctx, f, policy, u.baseURL+"/")
 }
 
 // uploadEnterpriseCommentBoxFlow is GHES's CommentBox upload: policy -> storage -> completion if requested.
-func (u *Uploader) uploadEnterpriseCommentBoxFlow(ctx context.Context, filePath string, refererPage *RefererPage, repositoryID int64, fileName string, fileSize int64, contentType string) (Asset, error) {
-	policy, err := u.requestPolicyCommentBox(ctx, refererPage, repositoryID, fileName, fileSize, contentType)
+func (u *Uploader) uploadEnterpriseCommentBoxFlow(ctx context.Context, f uploadFile) (Asset, error) {
+	policy, err := u.requestPolicyCommentBox(ctx, f)
 	if err != nil {
 		return Asset{}, err
 	}
 
-	storedAsset, err := u.requestStorageEnterprise(ctx, filePath, contentType, policy, u.baseURL+"/")
+	storedAsset, err := u.requestStorageEnterprise(ctx, f, policy, u.baseURL+"/")
 	if err != nil {
 		return Asset{}, err
 	}
@@ -223,7 +240,7 @@ func (u *Uploader) uploadEnterpriseCommentBoxFlow(ctx context.Context, filePath 
 	}
 
 	// The storage response's href is already usable, so a failed completion isn't fatal.
-	asset, err := u.requestCompletion(ctx, policy, refererPage)
+	asset, err := u.requestCompletion(ctx, f, policy)
 	if err != nil || asset.Href == "" {
 		return storedAsset, nil
 	}
@@ -231,29 +248,29 @@ func (u *Uploader) uploadEnterpriseCommentBoxFlow(ctx context.Context, filePath 
 }
 
 // requestPolicyCommentBox authenticates via X-Fetch-Nonce/X-GitHub-Client-Version, never authenticity_token.
-func (u *Uploader) requestPolicyCommentBox(ctx context.Context, refererPage *RefererPage, repositoryID int64, fileName string, fileSize int64, contentType string) (policyResponse, error) {
-	return u.requestPolicy(ctx, refererPage.URL, policyFields(repositoryID, fileName, fileSize, contentType), fetchNonceHeaders(refererPage.Meta))
+func (u *Uploader) requestPolicyCommentBox(ctx context.Context, f uploadFile) (policyResponse, error) {
+	return u.requestPolicy(ctx, f, policyFields(f), fetchNonceHeaders(f.refererPage.Meta))
 }
 
 // requestPolicyFileAttachment authenticates via authenticity_token and fails fast if it's missing from the referer page.
-func (u *Uploader) requestPolicyFileAttachment(ctx context.Context, refererPage *RefererPage, repositoryID int64, fileName string, fileSize int64, contentType string) (policyResponse, error) {
-	refererMeta := refererPage.Meta
-	if refererMeta.AuthenticityToken == "" {
+func (u *Uploader) requestPolicyFileAttachment(ctx context.Context, f uploadFile) (policyResponse, error) {
+	token := f.refererPage.Meta.AuthenticityToken
+	if token == "" {
 		return policyResponse{}, fmt.Errorf("enterprise host requires an authenticity_token, but none was found on the referer page")
 	}
 
-	fields := policyFields(repositoryID, fileName, fileSize, contentType)
-	fields["authenticity_token"] = refererMeta.AuthenticityToken
+	fields := policyFields(f)
+	fields["authenticity_token"] = token
 
-	return u.requestPolicy(ctx, refererPage.URL, fields, map[string]string{})
+	return u.requestPolicy(ctx, f, fields, map[string]string{})
 }
 
-func policyFields(repositoryID int64, fileName string, fileSize int64, contentType string) map[string]string {
+func policyFields(f uploadFile) map[string]string {
 	return map[string]string{
-		"repository_id": strconv.FormatInt(repositoryID, 10),
-		"name":          fileName,
-		"size":          strconv.FormatInt(fileSize, 10),
-		"content_type":  contentType,
+		"repository_id": strconv.FormatInt(f.repositoryID, 10),
+		"name":          f.name,
+		"size":          strconv.FormatInt(f.size, 10),
+		"content_type":  f.contentType,
 	}
 }
 
@@ -270,7 +287,7 @@ func fetchNonceHeaders(meta refererPageMetadata) map[string]string {
 }
 
 // requestPolicy posts to /upload/policies/assets; GitHub-Verified-Fetch is required on both deployment types.
-func (u *Uploader) requestPolicy(ctx context.Context, refererURL string, fields, headers map[string]string) (policyResponse, error) {
+func (u *Uploader) requestPolicy(ctx context.Context, f uploadFile, fields, headers map[string]string) (policyResponse, error) {
 	headers["Accept"] = "application/json"
 	headers["X-Requested-With"] = "XMLHttpRequest"
 	headers["GitHub-Verified-Fetch"] = "true"
@@ -280,7 +297,7 @@ func (u *Uploader) requestPolicy(ctx context.Context, refererURL string, fields,
 		URL:     u.baseURL + "/upload/policies/assets",
 		Fields:  fields,
 		Headers: headers,
-		Referer: refererURL,
+		Referer: f.refererPage.URL,
 	})
 	if err != nil {
 		return policyResponse{}, err
@@ -297,10 +314,10 @@ func (u *Uploader) requestPolicy(ctx context.Context, refererURL string, fields,
 }
 
 // requestStorageCloud POSTs to the S3 presigned URL; an empty/unparsable body isn't an error since requestCompletion fills in the asset.
-func (u *Uploader) requestStorageCloud(ctx context.Context, filePath string, contentType string, policy policyResponse, refererURL string) (Asset, error) {
+func (u *Uploader) requestStorageCloud(ctx context.Context, f uploadFile, policy policyResponse, refererURL string) (Asset, error) {
 	headers := make(map[string]string, len(policy.Header)+1)
-	if contentType != "" {
-		headers["X-File-Content-Type"] = contentType
+	if f.contentType != "" {
+		headers["X-File-Content-Type"] = f.contentType
 	}
 	maps.Copy(headers, policy.Header)
 
@@ -309,7 +326,7 @@ func (u *Uploader) requestStorageCloud(ctx context.Context, filePath string, con
 		URL:      policy.UploadURL,
 		Fields:   policy.Form,
 		Headers:  headers,
-		FilePath: filePath,
+		FilePath: f.path,
 		Referer:  refererURL,
 	})
 	if err != nil {
@@ -327,7 +344,7 @@ func (u *Uploader) requestStorageCloud(ctx context.Context, filePath string, con
 }
 
 // requestStorageEnterprise POSTs to the media host; the response IS the finished asset, so a missing href is a real error.
-func (u *Uploader) requestStorageEnterprise(ctx context.Context, filePath string, contentType string, policy policyResponse, refererURL string) (Asset, error) {
+func (u *Uploader) requestStorageEnterprise(ctx context.Context, f uploadFile, policy policyResponse, refererURL string) (Asset, error) {
 	fields := make(map[string]string, len(policy.Form)+1)
 	maps.Copy(fields, policy.Form)
 	if policy.UploadAuthenticityToken != "" {
@@ -335,8 +352,8 @@ func (u *Uploader) requestStorageEnterprise(ctx context.Context, filePath string
 	}
 
 	headers := make(map[string]string, len(policy.Header)+1)
-	if contentType != "" {
-		headers["X-File-Content-Type"] = contentType
+	if f.contentType != "" {
+		headers["X-File-Content-Type"] = f.contentType
 	}
 	maps.Copy(headers, policy.Header)
 
@@ -345,7 +362,7 @@ func (u *Uploader) requestStorageEnterprise(ctx context.Context, filePath string
 		URL:      policy.UploadURL,
 		Fields:   fields,
 		Headers:  headers,
-		FilePath: filePath,
+		FilePath: f.path,
 		Referer:  refererURL,
 	})
 	if err != nil {
@@ -363,7 +380,7 @@ func (u *Uploader) requestStorageEnterprise(ctx context.Context, filePath string
 }
 
 // requestCompletion PUTs to asset_upload_url to mark the asset ready.
-func (u *Uploader) requestCompletion(ctx context.Context, policy policyResponse, refererPage *RefererPage) (Asset, error) {
+func (u *Uploader) requestCompletion(ctx context.Context, f uploadFile, policy policyResponse) (Asset, error) {
 	if policy.AssetUploadURL == "" {
 		return policy.Asset, nil
 	}
@@ -374,7 +391,7 @@ func (u *Uploader) requestCompletion(ctx context.Context, policy policyResponse,
 	}
 
 	// Same fetch-nonce pair as the policy request, from the same referer page.
-	headers := fetchNonceHeaders(refererPage.Meta)
+	headers := fetchNonceHeaders(f.refererPage.Meta)
 	headers["Accept"] = "application/json"
 	headers["X-Requested-With"] = "XMLHttpRequest"
 
@@ -383,7 +400,7 @@ func (u *Uploader) requestCompletion(ctx context.Context, policy policyResponse,
 		URL:     completionURL,
 		Fields:  map[string]string{"authenticity_token": policy.AssetUploadAuthenticityToken},
 		Headers: headers,
-		Referer: refererPage.URL,
+		Referer: f.refererPage.URL,
 	})
 	if err != nil {
 		return Asset{}, err
