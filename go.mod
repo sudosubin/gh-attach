@@ -1,6 +1,6 @@
 module github.com/sudosubin/gh-attach
 
-go 1.25.12
+go 1.27.2
 
 require (
 	github.com/cli/go-gh/v2 v2.13.0
