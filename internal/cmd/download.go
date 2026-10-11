@@ -49,6 +49,7 @@ func NewCmdDownload(runF func(*DownloadOptions) error) *cobra.Command {
 		},
 	}
 
+	setFlagErrorHandler(cmd)
 	cmd.Flags().StringVarP(&opts.Output, "output", "O", "", "File to write to (use \"-\" for standard output)")
 	cmd.Flags().BoolVar(&opts.Clobber, "clobber", false, "Overwrite an existing file")
 	cmd.Flags().StringVar(&opts.Browser, "browser", "", "Browser to use ("+cookies.BrowserChoices()+")")

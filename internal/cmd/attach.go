@@ -71,6 +71,7 @@ func newCmdUpload(use string, runF func(*AttachOptions) error) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.Markdown, "markdown", false, "Output Markdown references")
 	cmd.Flags().BoolVarP(&opts.Verbose, "verbose", "v", false, "Verbose output")
 
+	setFlagErrorHandler(cmd)
 	addJSONFlags(cmd, &opts.JSON, availableJSONFields())
 	cmd.MarkFlagsMutuallyExclusive("markdown", "json")
 	for _, name := range []string{"browser", "profile", "cookie-store-path"} {

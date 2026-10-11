@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"errors"
+
+	"github.com/spf13/cobra"
 )
 
 type flagError struct {
@@ -19,4 +21,13 @@ func (e *flagError) Unwrap() error {
 func ShouldShowUsage(err error) bool {
 	_, ok := errors.AsType[*flagError](err)
 	return ok
+}
+
+func setFlagErrorHandler(cmd *cobra.Command) {
+	cmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
+		if cmd.HasParent() {
+			return cmd.Parent().FlagErrorFunc()(c, err)
+		}
+		return &flagError{err: err}
+	})
 }

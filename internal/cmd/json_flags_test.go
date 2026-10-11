@@ -13,6 +13,7 @@ func TestAddJSONFlags_Valid(t *testing.T) {
 
 	var parsed jsonFlags
 	cmd := &cobra.Command{RunE: func(*cobra.Command, []string) error { return nil }}
+	setFlagErrorHandler(cmd)
 	addJSONFlags(cmd, &parsed, []string{"id", "href", "name"})
 	cmd.SetArgs([]string{"--json", "id,href", "--jq", ".href"})
 	cmd.SetOut(io.Discard)
@@ -51,6 +52,7 @@ func TestAddJSONFlags_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var parsed jsonFlags
 			cmd := &cobra.Command{RunE: func(*cobra.Command, []string) error { return nil }}
+			setFlagErrorHandler(cmd)
 			addJSONFlags(cmd, &parsed, []string{"id", "href", "name"})
 			cmd.SetArgs(tt.args)
 			cmd.SetOut(io.Discard)
