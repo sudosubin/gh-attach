@@ -52,14 +52,23 @@ func (s *Service) Run(ctx context.Context, req Request) ([]attachments.Asset, er
 
 	repo := rest.Repository{Host: repoSpec.Host, Owner: repoSpec.Owner, Name: repoSpec.Name}
 
+	upload, err := s.prepareCookieUpload(ctx, repo, req)
+	if err != nil {
+		return nil, err
+	}
+	return uploadFiles(req.FilePaths, upload)
+}
+
+func (s *Service) prepareCookieUpload(ctx context.Context, repo rest.Repository, req Request) (func(string) (attachments.Asset, error), error) {
 	// Overlaps the DNS lookup with session/referer resolution below.
 	attachments.PrewarmUploadHostDNS(ctx, repo.Host)
 
 	var session web.Session
+	var err error
 	if req.SessionToken != "" {
 		session, err = newTokenSession(repo.Host, req.SessionToken)
 	} else {
-		session, err = s.resolveBrowserSession(ctx, repo.Host, cookies.ResolveInput{
+		session, err = s.resolveBrowserSession(ctx, repo.Host, cookieSourceInput{
 			Browser:         req.Browser,
 			Profile:         req.Profile,
 			CookieStorePath: req.CookieStorePath,
@@ -97,9 +106,9 @@ func (s *Service) Run(ctx context.Context, req Request) ([]attachments.Asset, er
 		}
 	}
 
-	return uploadFiles(req.FilePaths, func(filePath string) (attachments.Asset, error) {
+	return func(filePath string) (attachments.Asset, error) {
 		return uploader.Upload(ctx, filePath, refererPage, repositoryID)
-	})
+	}, nil
 }
 
 const maxConcurrentUploads = 2

@@ -3,35 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"sync"
 
 	"github.com/sudosubin/gh-attach/internal/cookies"
+	"github.com/sudosubin/gh-attach/internal/github/web"
 )
-
-// LoginResolver resolves the login the upload acts as, used to pick the matching cookie container.
-type LoginResolver interface {
-	Login(host string) (string, error)
-}
-
-// apiLoginResolver is the REST fallback, satisfied by rest.Service.CurrentLogin.
-type apiLoginResolver interface {
-	CurrentLogin() (string, error)
-}
-
-type configLoginResolver struct {
-	api apiLoginResolver
-}
-
-func NewConfigLoginResolver(api apiLoginResolver) LoginResolver {
-	return configLoginResolver{api: api}
-}
-
-func (r configLoginResolver) Login(host string) (string, error) {
-	if login, ok := loginFromLocalToken(host); ok {
-		return login, nil
-	}
-	return r.api.CurrentLogin()
-}
 
 // SessionResolver hides the login-then-cookie-match coupling behind a single "give me a session" call.
 type SessionResolver struct {
@@ -65,4 +42,31 @@ func (s *SessionResolver) Resolve(ctx context.Context, host string, sources []co
 	})
 
 	return s.cookies.Resolve(ctx, host, ghLogin, sources)
+}
+
+func (s *Service) resolveBrowserSession(
+	ctx context.Context,
+	host string,
+	input cookieSourceInput,
+	verbose bool,
+) (web.Session, error) {
+	sources, err := resolveCookieSources(input)
+	if err != nil {
+		return web.Session{}, err
+	}
+	loginResolver := s.loginResolver
+	if loginResolver == nil {
+		loginResolver = NewConfigLoginResolver(lazyAPILoginResolver{host: host})
+	}
+	resolved, err := NewSessionResolver(
+		loginResolver,
+		NewCookieResolver(s.providers, verbose, s.stderr),
+	).Resolve(ctx, (&url.URL{Host: host}).Hostname(), sources)
+	if err != nil {
+		return web.Session{}, err
+	}
+	return web.Session{
+		Cookies:   resolved.Session.Cookies,
+		UserAgent: resolved.Session.UserAgent,
+	}, nil
 }
