@@ -24,7 +24,7 @@ gh attach ./image.png -R owner/repo
 
 ## Installation
 
-Requires [GitHub CLI](https://github.com/cli/cli#installation). Supported images and videos on GitHub Cloud use the active `gh` authentication token first, without requiring a browser session. Browser-cookie mode also requires `gh auth login`. Session-token mode does not when the repository ID is available from GitHub's page.
+Requires [GitHub CLI](https://github.com/cli/cli#installation). Browser-cookie mode also requires `gh auth login`. Session-token mode does not when the repository ID is available from GitHub's page.
 
 ```sh
 gh extension install sudosubin/gh-attach
@@ -72,11 +72,9 @@ image.png -> https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-
 
 Up to two files are uploaded concurrently, and per-file failures do not stop the remaining uploads. With `--json`, results are always returned as an array.
 
-Token uploads support PNG, JPEG, GIF, WebP, SVG, MP4, MOV, and WebM. OAuth tokens, classic and fine-grained PATs, and GitHub App user tokens are attempted; legacy or unknown token formats are also attempted. Installation and refresh tokens use the browser-cookie flow instead. Authentication or permission failures retry once with matching browser cookies; rate limits and ambiguous upload failures do not retry. Images are limited to 10 MiB and videos to 100 MiB, with lower video limits possible depending on the repository's plan.
+GitHub Cloud media uploads use the active `gh` token, with browser-cookie fallback on authentication or permission errors. Supported formats are PNG, JPEG, GIF, WebP, SVG (up to 10 MiB), and MP4, MOV, WebM (up to 100 MiB; plan limits may be lower). GHES, other file types, explicit browser/session options, and JSON fields `id` or `originalName` use session cookies.
 
-Explicit browser or session-token options, GHES, other file types, and JSON output requesting `id` or `originalName` use the browser/session upload flow. The token API returns only a URL, so its remaining output fields come from the local file. Browser settings and cookies are loaded only when that flow is needed.
-
-Embed the returned URL in the intended issue, PR, or comment and verify access as another viewer when sharing it. Upload-only URLs can return 404 to other accounts or anonymous clients even for a public repository.
+Embed uploaded URLs in an issue, PR, or comment and verify viewer access; unattached uploads may return 404 to others.
 
 ### Download
 
@@ -108,12 +106,12 @@ The [Agent Skills standard](https://agentskills.io/clients) is supported by Clau
 - `--browser <name>`: Browser to read cookies from (`auto|arc|atlas|brave|chrome|chromium|comet|dia|edge|firefox|floorp|helium|librewolf|opera|safari|vivaldi|waterfox|whale|zen`).
 - `--profile <name>`: Browser profile name. For Firefox-family multi-account containers, append `:<container-name>` or `:id=<container-id>` to pin a specific container (e.g. `default:Work`, `default:id=2`).
 - `--cookie-store-path <path>`: Explicit cookie DB file path.
-- `--session-token <value>`: Bare `user_session` cookie value. Prefer the `GH_ATTACH_SESSION_TOKEN` environment variable to keep this account credential out of command history and process arguments. Explicit browser options override the environment variable. An empty environment value is ignored; an explicitly empty flag is an error.
+- `--session-token <value>`: Bare `user_session` cookie value. Prefer the `GH_ATTACH_SESSION_TOKEN` environment variable to keep this account credential out of command history and process arguments. Explicit browser options override the environment variable.
 - `--markdown`: Output Markdown references.
 - `--json <fields>`: Output JSON with selected fields.
 - `-q, --jq <expression>`: Apply jq filter to JSON output (requires `--json`).
 - `-t, --template <go-template>`: Format JSON output using Go template (requires `--json`).
-- `-v, --verbose`: Print upload authentication and cookie source resolution logs to stderr.
+- `-v, --verbose`: Print authentication logs to stderr.
 - `-h, --help`: Show help.
 
 ### Download options
@@ -156,8 +154,7 @@ browsers:
 ## How It Works
 
 - It first resolves the target repository (`owner/repo`).
-- Supported GitHub Cloud media uses the active `gh` token and the numeric repository ID to upload directly to `https://uploads.<host>/user-attachments/assets`.
-- Authentication or permission rejection falls back to the session-cookie flow. Other file types, explicit authentication selections, GHES, and server metadata output use that flow directly.
+- GitHub Cloud media uses `https://uploads.<host>/user-attachments/assets`; the steps below describe session-cookie uploads.
 - With browser-cookie mode, it resolves the current GitHub login via the `gh` API and selects a browser session whose [`dotcom_user`](https://docs.github.com/en/site-policy/privacy-policies/github-cookies#cookies) matches it.
 - With `--session-token` or `GH_ATTACH_SESSION_TOKEN`, it uses the supplied bare `user_session` value without reading a browser.
 - Using that session cookie, it requests GitHub upload policies (`/upload/policies/assets`) and uploads each file binary.
