@@ -8,12 +8,12 @@ import (
 	"io"
 	"mime"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/cli/go-gh/v2/pkg/auth"
+	"github.com/sudosubin/gh-attach/internal/github/attachments"
 	"github.com/sudosubin/gh-attach/internal/github/web"
 )
 
@@ -32,6 +32,7 @@ type DownloadRequest struct {
 	Profile         string
 	CookieStorePath string
 	SessionToken    string
+	UseBrowser      bool
 	Verbose         bool
 }
 
@@ -49,7 +50,7 @@ func (s *Service) Download(ctx context.Context, req DownloadRequest) (io.ReadClo
 		return s.download(ctx, attachmentURL, session, "")
 	}
 
-	if req.Browser != "" || req.Profile != "" || req.CookieStorePath != "" {
+	if req.UseBrowser || req.Browser != "" || req.Profile != "" || req.CookieStorePath != "" {
 		session, sessionErr := s.resolveBrowserSession(ctx, host, req.cookieSources(), req.Verbose)
 		if sessionErr != nil {
 			return nil, sessionErr
@@ -78,25 +79,14 @@ func (req DownloadRequest) cookieSources() cookieSourceInput {
 
 // parseAttachmentURL validates a user-attachment URL and returns it with the configured host to authenticate as.
 func parseAttachmentURL(rawURL string) (string, string, error) {
-	parsed, err := url.ParseRequestURI(strings.TrimSpace(rawURL))
+	parsed, err := attachments.ParseURL(rawURL)
 	if err != nil {
-		return "", "", fmt.Errorf("invalid attachment URL: %w", err)
-	}
-	if parsed.Scheme != "https" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", "", errors.New("attachment URL must be an HTTPS URL without credentials, query, or fragment")
+		return "", "", err
 	}
 
 	host, known := knownAuthHost(parsed.Host)
 	if !known {
 		return "", "", fmt.Errorf("attachment URL host %q is not configured in gh", parsed.Host)
-	}
-
-	segments := strings.Split(strings.TrimPrefix(parsed.EscapedPath(), "/"), "/")
-	validAsset := len(segments) == 3 && segments[0] == "user-attachments" && segments[1] == "assets" && segments[2] != ""
-	validFile := len(segments) >= 4 && segments[0] == "user-attachments" && segments[1] == "files" &&
-		segments[2] != "" && segments[3] != ""
-	if (!validAsset && !validFile) || segments[len(segments)-1] == "" {
-		return "", "", errors.New("URL is not a GitHub user-attachment")
 	}
 
 	return parsed.String(), host, nil
@@ -191,11 +181,5 @@ func checkDownloadAuthentication(resp *http.Response) error {
 }
 
 func shouldRetryWithCookies(err error) bool {
-	if errors.Is(err, errDownloadAuthenticationRequired) {
-		return true
-	}
-	if httpErr, ok := errors.AsType[*api.HTTPError](err); ok {
-		return httpErr.StatusCode == http.StatusUnauthorized || httpErr.StatusCode == http.StatusForbidden || httpErr.StatusCode == http.StatusNotFound
-	}
-	return false
+	return errors.Is(err, errDownloadAuthenticationRequired) || isAuthenticationError(err)
 }
