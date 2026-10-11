@@ -101,6 +101,8 @@ var markdownLabelEscaper = strings.NewReplacer(
 	`\`, `\\`,
 	`[`, `\[`,
 	`]`, `\]`,
+	"\r", " ",
+	"\n", " ",
 )
 
 func markdownForAsset(asset attachments.Asset) string {
@@ -108,7 +110,7 @@ func markdownForAsset(asset attachments.Asset) string {
 	switch asset.ContentType {
 	case "image/gif", "image/jpeg", "image/jpg", "image/png", "image/svg+xml", "image/webp":
 		return fmt.Sprintf("![%s](%s)", name, asset.Href)
-	case "video/mp4", "video/quicktime":
+	case "video/mp4", "video/quicktime", "video/webm":
 		return asset.Href
 	default:
 		return fmt.Sprintf("[%s](%s)", name, asset.Href)
