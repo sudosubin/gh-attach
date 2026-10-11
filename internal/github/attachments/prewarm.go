@@ -26,7 +26,7 @@ func PrewarmUploadHostDNS(ctx context.Context, host string) {
 // lookup is a param, not a package var, so test stubs don't race goroutines.
 func prewarmUploadHostDNS(ctx context.Context, host string, lookup hostLookupFunc) {
 	if auth.IsEnterprise(host) {
-		return // GHES upload host isn't known until the policies response
+		return // GHES upload host isn't known until the policy response
 	}
 
 	for _, h := range cloudUploadHosts {

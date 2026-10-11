@@ -30,7 +30,7 @@ type Asset struct {
 	OriginalName *string `json:"original_name"`
 }
 
-type policiesResponse struct {
+type policyResponse struct {
 	UploadURL                    string    `json:"upload_url"`
 	UploadAuthenticityToken      string    `json:"upload_authenticity_token"`
 	Form                         stringMap `json:"form"`

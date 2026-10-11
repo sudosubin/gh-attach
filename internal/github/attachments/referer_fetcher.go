@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/sudosubin/gh-attach/internal/github/web"
 )
@@ -61,6 +62,7 @@ func fetchAndParse(ctx context.Context, client *web.Client, pageURL string) (*Re
 	html := string(body)
 	meta := parseCSRFMetadata(html)
 	meta.RepositoryID = extractRepositoryID(html)
+	meta.UploadForm = detectUploadForm(html, meta)
 	return &RefererPage{URL: pageURL, Meta: meta}, nil
 }
 
@@ -69,6 +71,32 @@ type refererPageMetadata struct {
 	AuthenticityToken   string
 	FetchNonce          string
 	GitHubClientVersion string
+	UploadForm          uploadForm
+}
+
+// uploadForm is the uploader a referer page renders: <file-attachment> (GHES 3.17) or CommentBox (github.com, newer GHES).
+type uploadForm int
+
+const (
+	uploadFormUnknown uploadForm = iota
+	uploadFormFileAttachment
+	uploadFormCommentBox
+)
+
+var fileAttachmentPattern = regexp.MustCompile(`<file-attachment\b[^>]*\bdata-upload-policy-url=["']`)
+
+// detectUploadForm keys on <file-attachment> since its pages embed React too; token-only pages keep it.
+func detectUploadForm(html string, meta refererPageMetadata) uploadForm {
+	switch {
+	case fileAttachmentPattern.MatchString(html):
+		return uploadFormFileAttachment
+	case strings.TrimSpace(meta.FetchNonce) != "":
+		return uploadFormCommentBox
+	case meta.AuthenticityToken != "":
+		return uploadFormFileAttachment
+	default:
+		return uploadFormUnknown
+	}
 }
 
 var (
