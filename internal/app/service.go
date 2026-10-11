@@ -45,7 +45,7 @@ func (s *Service) Run(ctx context.Context, req Request) ([]attachments.Asset, er
 		return nil, errors.New("no files to upload")
 	}
 
-	repoSpec, err := rest.ResolveRepositorySpec(req.Repo)
+	repoSpec, err := resolveRepositorySpec(req.Repo)
 	if err != nil {
 		return nil, fmt.Errorf("resolve repository spec: %w", err)
 	}
@@ -96,13 +96,9 @@ func (s *Service) prepareCookieUpload(ctx context.Context, repo rest.Repository,
 
 	repositoryID := refererPage.Meta.RepositoryID
 	if repositoryID == 0 {
-		api, apiErr := rest.NewService(repo.Host, nil)
-		if apiErr != nil {
-			return nil, fmt.Errorf("init gh api service: %w", apiErr)
-		}
-		repositoryID, err = NewPageRepositoryIDResolver(api).RepositoryID(refererPage, repo.Owner, repo.Name)
+		repositoryID, err = resolveRepositoryID(repositoryID, repo, nil)
 		if err != nil {
-			return nil, fmt.Errorf("resolve repository: %w", err)
+			return nil, err
 		}
 	}
 
