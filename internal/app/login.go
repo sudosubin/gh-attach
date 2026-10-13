@@ -8,6 +8,31 @@ import (
 	"github.com/sudosubin/gh-attach/internal/github/rest"
 )
 
+// LoginResolver resolves the GitHub login used to select a matching browser session.
+type LoginResolver interface {
+	Login(host string) (string, error)
+}
+
+// apiLoginResolver is the REST fallback, satisfied by rest.Service.CurrentLogin.
+type apiLoginResolver interface {
+	CurrentLogin() (string, error)
+}
+
+type configLoginResolver struct {
+	api apiLoginResolver
+}
+
+func NewConfigLoginResolver(api apiLoginResolver) LoginResolver {
+	return configLoginResolver{api: api}
+}
+
+func (r configLoginResolver) Login(host string) (string, error) {
+	if login, ok := loginFromLocalToken(host); ok {
+		return login, nil
+	}
+	return r.api.CurrentLogin()
+}
+
 // lazyAPILoginResolver builds the REST client only when the API fallback runs.
 type lazyAPILoginResolver struct {
 	host string

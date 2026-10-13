@@ -45,21 +45,30 @@ func (s *Service) Run(ctx context.Context, req Request) ([]attachments.Asset, er
 		return nil, errors.New("no files to upload")
 	}
 
-	repoSpec, err := rest.ResolveRepositorySpec(req.Repo)
+	repoSpec, err := resolveRepositorySpec(req.Repo)
 	if err != nil {
 		return nil, fmt.Errorf("resolve repository spec: %w", err)
 	}
 
 	repo := rest.Repository{Host: repoSpec.Host, Owner: repoSpec.Owner, Name: repoSpec.Name}
 
+	upload, err := s.prepareCookieUpload(ctx, repo, req)
+	if err != nil {
+		return nil, err
+	}
+	return uploadFiles(req.FilePaths, upload)
+}
+
+func (s *Service) prepareCookieUpload(ctx context.Context, repo rest.Repository, req Request) (func(string) (attachments.Asset, error), error) {
 	// Overlaps the DNS lookup with session/referer resolution below.
 	attachments.PrewarmUploadHostDNS(ctx, repo.Host)
 
 	var session web.Session
+	var err error
 	if req.SessionToken != "" {
 		session, err = newTokenSession(repo.Host, req.SessionToken)
 	} else {
-		session, err = s.resolveBrowserSession(ctx, repo.Host, cookies.ResolveInput{
+		session, err = s.resolveBrowserSession(ctx, repo.Host, cookieSourceInput{
 			Browser:         req.Browser,
 			Profile:         req.Profile,
 			CookieStorePath: req.CookieStorePath,
@@ -87,19 +96,15 @@ func (s *Service) Run(ctx context.Context, req Request) ([]attachments.Asset, er
 
 	repositoryID := refererPage.Meta.RepositoryID
 	if repositoryID == 0 {
-		api, apiErr := rest.NewService(repo.Host, nil)
-		if apiErr != nil {
-			return nil, fmt.Errorf("init gh api service: %w", apiErr)
-		}
-		repositoryID, err = NewPageRepositoryIDResolver(api).RepositoryID(refererPage, repo.Owner, repo.Name)
+		repositoryID, err = resolveRepositoryID(repositoryID, repo, nil)
 		if err != nil {
-			return nil, fmt.Errorf("resolve repository: %w", err)
+			return nil, err
 		}
 	}
 
-	return uploadFiles(req.FilePaths, func(filePath string) (attachments.Asset, error) {
+	return func(filePath string) (attachments.Asset, error) {
 		return uploader.Upload(ctx, filePath, refererPage, repositoryID)
-	})
+	}, nil
 }
 
 const maxConcurrentUploads = 2

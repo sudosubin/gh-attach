@@ -1,11 +1,6 @@
 package rest
 
-import (
-	"fmt"
-	"strings"
-
-	"github.com/cli/go-gh/v2/pkg/repository"
-)
+import "fmt"
 
 type Repository struct {
 	Host  string
@@ -35,26 +30,4 @@ func (s *Service) ResolveRepository(owner string, name string) (Repository, erro
 		Name:  name,
 		ID:    repoResp.ID,
 	}, nil
-}
-
-func (s *Service) CurrentLogin() (string, error) {
-	var userResp struct {
-		Login string `json:"login"`
-	}
-	if err := s.client.Get("user", &userResp); err != nil {
-		return "", err
-	}
-	if userResp.Login == "" {
-		return "", fmt.Errorf("failed to resolve current GitHub login")
-	}
-
-	return userResp.Login, nil
-}
-
-func ResolveRepositorySpec(repoArg string) (repository.Repository, error) {
-	repoArg = strings.TrimSpace(repoArg)
-	if repoArg != "" {
-		return repository.Parse(repoArg)
-	}
-	return repository.Current()
 }

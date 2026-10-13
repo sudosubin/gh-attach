@@ -1,53 +1,97 @@
 package rest
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
 
-func TestResolveRepositorySpec_RejectsRepoOnly(t *testing.T) {
-	t.Setenv("GH_HOST", "github.com")
+// stubRESTGetter implements RESTGetter, unmarshalling a canned body or returning a canned error.
+type stubRESTGetter struct {
+	body string
+	err  error
+}
 
-	_, err := ResolveRepositorySpec("repo")
+func (s stubRESTGetter) Get(_ string, data any) error {
+	if s.err != nil {
+		return s.err
+	}
+	return json.Unmarshal([]byte(s.body), data)
+}
+
+func TestResolveRepository(t *testing.T) {
+	tests := []struct {
+		name    string
+		stub    stubRESTGetter
+		wantID  int64
+		wantErr bool
+	}{
+		{
+			name:   "valid id",
+			stub:   stubRESTGetter{body: `{"id":261246700}`},
+			wantID: 261246700,
+		},
+		{
+			name:    "zero id",
+			stub:    stubRESTGetter{body: `{"id":0}`},
+			wantErr: true,
+		},
+		{
+			name:    "missing id",
+			stub:    stubRESTGetter{body: `{}`},
+			wantErr: true,
+		},
+		{
+			name:    "negative id",
+			stub:    stubRESTGetter{body: `{"id":-5}`},
+			wantErr: true,
+		},
+		{
+			name:    "client error propagated",
+			stub:    stubRESTGetter{err: fmt.Errorf("boom")},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, err := NewService("github.com", tt.stub)
+			if err != nil {
+				t.Fatalf("NewService() error = %v", err)
+			}
+
+			repo, err := svc.ResolveRepository("owner", "repo")
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("ResolveRepository() error = nil, want non-nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ResolveRepository() error = %v", err)
+			}
+			if repo.ID != tt.wantID {
+				t.Fatalf("ResolveRepository() ID = %d, want %d", repo.ID, tt.wantID)
+			}
+			if repo.Owner != "owner" || repo.Name != "repo" {
+				t.Fatalf("ResolveRepository() repo = %#v", repo)
+			}
+		})
+	}
+}
+
+func TestResolveRepository_ErrorMentionsRepo(t *testing.T) {
+	svc, err := NewService("github.com", stubRESTGetter{body: `{"id":0}`})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc.ResolveRepository("owner", "repo")
 	if err == nil {
-		t.Fatalf("ResolveRepositorySpec() error = nil, want non-nil")
+		t.Fatalf("ResolveRepository() error = nil, want non-nil")
 	}
-	if !strings.Contains(err.Error(), "[HOST/]OWNER/REPO") {
-		t.Fatalf("error = %q, want to contain %q", err.Error(), "[HOST/]OWNER/REPO")
-	}
-}
-
-func TestResolveRepositorySpec_OwnerRepo(t *testing.T) {
-	t.Setenv("GH_HOST", "github.com")
-
-	parsed, err := ResolveRepositorySpec("owner/repo")
-	if err != nil {
-		t.Fatalf("ResolveRepositorySpec() error = %v", err)
-	}
-	if parsed.Owner != "owner" || parsed.Name != "repo" {
-		t.Fatalf("parsed = %#v", parsed)
-	}
-}
-
-func TestResolveRepositorySpec_HostOwnerRepo(t *testing.T) {
-	parsed, err := ResolveRepositorySpec("github.example.com/owner/repo")
-	if err != nil {
-		t.Fatalf("ResolveRepositorySpec() error = %v", err)
-	}
-	if parsed.Host != "github.example.com" || parsed.Owner != "owner" || parsed.Name != "repo" {
-		t.Fatalf("parsed = %#v", parsed)
-	}
-}
-
-func TestResolveRepositorySpec_EmptyRepoUsesCurrentRepository(t *testing.T) {
-	t.Setenv("GH_REPO", "owner/repo")
-	t.Setenv("GH_HOST", "github.com")
-
-	parsed, err := ResolveRepositorySpec("")
-	if err != nil {
-		t.Fatalf("ResolveRepositorySpec() error = %v", err)
-	}
-	if parsed.Host != "github.com" || parsed.Owner != "owner" || parsed.Name != "repo" {
-		t.Fatalf("parsed = %#v", parsed)
+	if !strings.Contains(err.Error(), "owner/repo") {
+		t.Fatalf("error = %q, want to contain %q", err.Error(), "owner/repo")
 	}
 }

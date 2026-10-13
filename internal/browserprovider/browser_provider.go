@@ -3,14 +3,38 @@ package browserprovider
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"runtime"
 
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
 
+type BrowserSession struct {
+	Browser   cookies.Browser
+	Profile   string
+	Cookies   []*http.Cookie
+	UserAgent string
+}
+
+type BrowserProvider interface {
+	Browser() cookies.Browser
+	BackendName() string
+	Load(ctx context.Context, host string, source cookies.Source) ([]BrowserSession, error)
+}
+
 type browserProvider struct {
 	browser cookies.Browser
 	backend Backend
+}
+
+func NewDefaultRegistry() map[cookies.Browser]BrowserProvider {
+	sweet := newSweetcookieBackend()
+
+	reg := make(map[cookies.Browser]BrowserProvider)
+	for _, b := range cookies.ConcreteBrowsers() {
+		reg[b] = &browserProvider{browser: b, backend: sweet}
+	}
+	return reg
 }
 
 func (p *browserProvider) Browser() cookies.Browser {
@@ -60,14 +84,4 @@ func firstStorePath(sets []CookieSet) string {
 		}
 	}
 	return ""
-}
-
-func NewDefaultRegistry() map[cookies.Browser]BrowserProvider {
-	sweet := newSweetcookieBackend()
-
-	reg := make(map[cookies.Browser]BrowserProvider)
-	for _, b := range cookies.ConcreteBrowsers() {
-		reg[b] = &browserProvider{browser: b, backend: sweet}
-	}
-	return reg
 }

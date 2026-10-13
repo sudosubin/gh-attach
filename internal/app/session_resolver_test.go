@@ -12,17 +12,6 @@ import (
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
 
-type fakeAPILogin struct {
-	login string
-	err   error
-	calls int
-}
-
-func (f *fakeAPILogin) CurrentLogin() (string, error) {
-	f.calls++
-	return f.login, f.err
-}
-
 type fakeLoginResolver struct {
 	login string
 	err   error
@@ -30,26 +19,6 @@ type fakeLoginResolver struct {
 
 func (f fakeLoginResolver) Login(string) (string, error) {
 	return f.login, f.err
-}
-
-func TestConfigLoginResolver_FallsBackToAPIWhenNoLocalToken(t *testing.T) {
-	// No env token and no config file -> loginFromLocalToken declines, forcing the REST fallback.
-	t.Setenv("GH_TOKEN", "")
-	t.Setenv("GITHUB_TOKEN", "")
-	t.Setenv("GH_ENTERPRISE_TOKEN", "")
-	t.Setenv("GITHUB_ENTERPRISE_TOKEN", "")
-
-	api := &fakeAPILogin{login: "api-user"}
-	got, err := NewConfigLoginResolver(api).Login("nonexistent.invalid")
-	if err != nil {
-		t.Fatalf("Login() error = %v", err)
-	}
-	if got != "api-user" {
-		t.Fatalf("Login() = %q, want %q", got, "api-user")
-	}
-	if api.calls != 1 {
-		t.Fatalf("api.calls = %d, want 1", api.calls)
-	}
 }
 
 func TestSessionResolver_UsesLoginToMatchCookies(t *testing.T) {

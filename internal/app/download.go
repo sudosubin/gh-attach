@@ -14,7 +14,6 @@ import (
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/cli/go-gh/v2/pkg/auth"
-	"github.com/sudosubin/gh-attach/internal/cookies"
 	"github.com/sudosubin/gh-attach/internal/github/web"
 )
 
@@ -34,14 +33,6 @@ type DownloadRequest struct {
 	CookieStorePath string
 	SessionToken    string
 	Verbose         bool
-}
-
-func (req DownloadRequest) cookieSources() cookies.ResolveInput {
-	return cookies.ResolveInput{
-		Browser:         req.Browser,
-		Profile:         req.Profile,
-		CookieStorePath: req.CookieStorePath,
-	}
 }
 
 func (s *Service) Download(ctx context.Context, req DownloadRequest) (io.ReadCloser, error) {
@@ -75,6 +66,14 @@ func (s *Service) Download(ctx context.Context, req DownloadRequest) (io.ReadClo
 		return nil, downloadErr
 	}
 	return s.retryWithBrowserCookies(ctx, attachmentURL, host, req, downloadErr)
+}
+
+func (req DownloadRequest) cookieSources() cookieSourceInput {
+	return cookieSourceInput{
+		Browser:         req.Browser,
+		Profile:         req.Profile,
+		CookieStorePath: req.CookieStorePath,
+	}
 }
 
 // parseAttachmentURL validates a user-attachment URL and returns it with the configured host to authenticate as.
@@ -131,33 +130,6 @@ func (s *Service) retryWithBrowserCookies(
 		return nil, errors.Join(firstErr, fmt.Errorf("browser cookie fallback: %w", err))
 	}
 	return body, nil
-}
-
-func (s *Service) resolveBrowserSession(
-	ctx context.Context,
-	host string,
-	input cookies.ResolveInput,
-	verbose bool,
-) (web.Session, error) {
-	sources, err := cookies.ResolveSources(input)
-	if err != nil {
-		return web.Session{}, err
-	}
-	loginResolver := s.loginResolver
-	if loginResolver == nil {
-		loginResolver = NewConfigLoginResolver(lazyAPILoginResolver{host: host})
-	}
-	resolved, err := NewSessionResolver(
-		loginResolver,
-		NewCookieResolver(s.providers, verbose, s.stderr),
-	).Resolve(ctx, (&url.URL{Host: host}).Hostname(), sources)
-	if err != nil {
-		return web.Session{}, err
-	}
-	return web.Session{
-		Cookies:   resolved.Session.Cookies,
-		UserAgent: resolved.Session.UserAgent,
-	}, nil
 }
 
 func (s *Service) download(

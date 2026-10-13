@@ -1,10 +1,12 @@
-package cookies
+package app
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sudosubin/gh-attach/internal/cookies"
 )
 
 func writeDefaultAttachConfig(t *testing.T, content string) string {
@@ -26,19 +28,19 @@ func writeDefaultAttachConfig(t *testing.T, content string) string {
 }
 
 func TestResolveSources_CLIOverrideWithProfile(t *testing.T) {
-	sources, err := ResolveSources(ResolveInput{
+	sources, err := resolveCookieSources(cookieSourceInput{
 		Browser: "chrome",
 		Profile: "Default",
 	})
 	if err != nil {
-		t.Fatalf("ResolveSources() error = %v", err)
+		t.Fatalf("resolveCookieSources() error = %v", err)
 	}
 
 	if len(sources) != 1 {
 		t.Fatalf("len(sources) = %d, want 1", len(sources))
 	}
-	if sources[0].Browser != BrowserChrome {
-		t.Fatalf("browser = %s, want %s", sources[0].Browser, BrowserChrome)
+	if sources[0].Browser != cookies.BrowserChrome {
+		t.Fatalf("browser = %s, want %s", sources[0].Browser, cookies.BrowserChrome)
 	}
 	if sources[0].Profile != "Default" {
 		t.Fatalf("profile = %q", sources[0].Profile)
@@ -49,12 +51,12 @@ func TestResolveSources_CLIOverrideWithProfile(t *testing.T) {
 }
 
 func TestResolveSources_CLIOverrideWithCookieStorePath(t *testing.T) {
-	sources, err := ResolveSources(ResolveInput{
+	sources, err := resolveCookieSources(cookieSourceInput{
 		Browser:         "chrome",
 		CookieStorePath: "/tmp/Cookies",
 	})
 	if err != nil {
-		t.Fatalf("ResolveSources() error = %v", err)
+		t.Fatalf("resolveCookieSources() error = %v", err)
 	}
 
 	if len(sources) != 1 || sources[0].CookieStorePath != "/tmp/Cookies" || sources[0].Profile != "" {
@@ -63,13 +65,13 @@ func TestResolveSources_CLIOverrideWithCookieStorePath(t *testing.T) {
 }
 
 func TestResolveSources_RejectsProfileWithCookieStorePathCLI(t *testing.T) {
-	_, err := ResolveSources(ResolveInput{
+	_, err := resolveCookieSources(cookieSourceInput{
 		Browser:         "chrome",
 		Profile:         "Default",
 		CookieStorePath: "/tmp/Cookies",
 	})
 	if err == nil {
-		t.Fatalf("ResolveSources() error = nil, want non-nil")
+		t.Fatalf("resolveCookieSources() error = nil, want non-nil")
 	}
 	if !strings.Contains(err.Error(), "cannot be combined") {
 		t.Fatalf("error = %q, want to mention 'cannot be combined'", err.Error())
@@ -83,9 +85,9 @@ func TestResolveSources_RejectsProfileWithCookieStorePathConfig(t *testing.T) {
     cookie_store_path: /tmp/Cookies
 `)
 
-	_, err := ResolveSources(ResolveInput{})
+	_, err := resolveCookieSources(cookieSourceInput{})
 	if err == nil {
-		t.Fatalf("ResolveSources() error = nil, want non-nil")
+		t.Fatalf("resolveCookieSources() error = nil, want non-nil")
 	}
 	if !strings.Contains(err.Error(), "config.browsers[0]") || !strings.Contains(err.Error(), "cannot be combined") {
 		t.Fatalf("error = %q, want to mention config.browsers[0] and 'cannot be combined'", err.Error())
@@ -100,15 +102,15 @@ func TestResolveSources_FromDefaultConfigFile(t *testing.T) {
     profile: default-release
 `)
 
-	sources, err := ResolveSources(ResolveInput{})
+	sources, err := resolveCookieSources(cookieSourceInput{})
 	if err != nil {
-		t.Fatalf("ResolveSources() error = %v", err)
+		t.Fatalf("resolveCookieSources() error = %v", err)
 	}
 
 	if len(sources) != 2 {
 		t.Fatalf("len(sources) = %d, want 2", len(sources))
 	}
-	if sources[0].Browser != BrowserChrome || sources[1].Browser != BrowserFirefox {
+	if sources[0].Browser != cookies.BrowserChrome || sources[1].Browser != cookies.BrowserFirefox {
 		t.Fatalf("unexpected browser chain: %#v", sources)
 	}
 }
@@ -118,11 +120,11 @@ func TestResolveSources_DefaultAutoWhenNoConfig(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	t.Setenv("HOME", filepath.Join(dir, "home"))
 
-	sources, err := ResolveSources(ResolveInput{})
+	sources, err := resolveCookieSources(cookieSourceInput{})
 	if err != nil {
-		t.Fatalf("ResolveSources() error = %v", err)
+		t.Fatalf("resolveCookieSources() error = %v", err)
 	}
-	if len(sources) != 1 || sources[0].Browser != BrowserAuto {
+	if len(sources) != 1 || sources[0].Browser != cookies.BrowserAuto {
 		t.Fatalf("sources = %#v, want [auto]", sources)
 	}
 }
@@ -132,9 +134,9 @@ func TestResolveSources_InvalidBrowserInConfig(t *testing.T) {
   - browser: unknown-browser
 `)
 
-	_, err := ResolveSources(ResolveInput{})
+	_, err := resolveCookieSources(cookieSourceInput{})
 	if err == nil {
-		t.Fatalf("ResolveSources() error = nil, want non-nil")
+		t.Fatalf("resolveCookieSources() error = nil, want non-nil")
 	}
 	if !strings.Contains(err.Error(), "config.browsers[0].browser") {
 		t.Fatalf("error = %q, want to contain %q", err.Error(), "config.browsers[0].browser")
@@ -146,9 +148,9 @@ func TestResolveSources_MissingBrowserInConfig(t *testing.T) {
   - profile: Default
 `)
 
-	_, err := ResolveSources(ResolveInput{})
+	_, err := resolveCookieSources(cookieSourceInput{})
 	if err == nil {
-		t.Fatalf("ResolveSources() error = nil, want non-nil")
+		t.Fatalf("resolveCookieSources() error = nil, want non-nil")
 	}
 	if !strings.Contains(err.Error(), "config.browsers[0].browser: required") {
 		t.Fatalf("error = %q, want to contain %q", err.Error(), "config.browsers[0].browser: required")

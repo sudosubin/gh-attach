@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -24,78 +23,17 @@ type Uploader struct {
 	isEnterprise bool
 }
 
-// contentTypesByExtension contains known browser-compatible MIME hints.
-// Empty content types intentionally let the server infer from the extension.
-var contentTypesByExtension = map[string]string{
-	".bmp":        "image/bmp",
-	".c":          "",
-	".copilotmd":  "",
-	".cpp":        "",
-	".cpuprofile": "",
-	".cs":         "",
-	".css":        "text/css",
-	".csv":        "text/csv",
-	".debug":      "",
-	".dmp":        "",
-	".doc":        "application/msword",
-	".docx":       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-	".drawio":     "",
-	".eml":        "message/rfc822",
-	".fodg":       "application/vnd.oasis.opendocument.graphics",
-	".fodp":       "application/vnd.oasis.opendocument.presentation",
-	".fods":       "application/vnd.oasis.opendocument.spreadsheet",
-	".fodt":       "application/vnd.oasis.opendocument.text",
-	".gif":        "image/gif",
-	".gz":         "application/x-gzip",
-	".htm":        "text/html",
-	".html":       "text/html",
-	".ipynb":      "",
-	".java":       "",
-	".jpeg":       "image/jpeg",
-	".jpg":        "image/jpeg",
-	".js":         "text/javascript",
-	".json":       "application/json",
-	".jsonc":      "",
-	".log":        "",
-	".md":         "text/markdown",
-	".mov":        "video/quicktime",
-	".mp3":        "audio/mpeg",
-	".mp4":        "video/mp4",
-	".msg":        "",
-	".odf":        "application/vnd.oasis.opendocument.formula",
-	".odg":        "application/vnd.oasis.opendocument.graphics",
-	".odp":        "application/vnd.oasis.opendocument.presentation",
-	".ods":        "application/vnd.oasis.opendocument.spreadsheet",
-	".odt":        "application/vnd.oasis.opendocument.text",
-	".patch":      "",
-	".pdb":        "application/octet-stream",
-	".pdf":        "application/pdf",
-	".php":        "text/php",
-	".png":        "image/png",
-	".pptx":       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-	".py":         "text/x-python-script",
-	".rtf":        "text/rtf",
-	".sh":         "text/x-sh",
-	".sql":        "",
-	".svg":        "image/svg+xml",
-	".tgz":        "application/gzip",
-	".tif":        "image/tiff",
-	".tiff":       "image/tiff",
-	".ts":         "",
-	".tsv":        "text/tab-separated-values",
-	".tsx":        "",
-	".txt":        "text/plain",
-	".wav":        "audio/wav",
-	".webm":       "video/webm",
-	".webp":       "image/webp",
-	".xls":        "application/vnd.ms-excel",
-	".xlsm":       "application/vnd.ms-excel.sheet.macroenabled.12",
-	".xlsx":       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-	".xml":        "text/xml",
-	".yaml":       "application/x-yaml",
-	".yml":        "application/x-yaml",
-	".zip":        "application/zip",
+// uploadFile is one file's upload context, built once by Upload and passed through every step.
+type uploadFile struct {
+	path         string
+	name         string
+	size         int64
+	contentType  string
+	repositoryID int64
+	refererPage  *RefererPage
 }
+
+var errMissingHref = errors.New("upload response missing href")
 
 func NewUploader(host string, session web.Session, client *http.Client) (*Uploader, error) {
 	return &Uploader{
@@ -133,12 +71,9 @@ func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *Ref
 		return Asset{}, fmt.Errorf("invalid referer page")
 	}
 
-	fileInfo, err := os.Stat(filePath)
+	fileInfo, err := StatUploadFile(filePath)
 	if err != nil {
-		return Asset{}, fmt.Errorf("file: %w", err)
-	}
-	if fileInfo.IsDir() {
-		return Asset{}, fmt.Errorf("%s is a directory", filePath)
+		return Asset{}, err
 	}
 
 	fileName := filepath.Base(filePath)
@@ -168,21 +103,6 @@ func (u *Uploader) Upload(ctx context.Context, filePath string, refererPage *Ref
 	asset.Name = cmp.Or(asset.Name, f.name)
 	asset.ContentType = cmp.Or(asset.ContentType, f.contentType)
 	return asset, nil
-}
-
-// uploadFile is one file's upload context, built once by Upload and passed through every step.
-type uploadFile struct {
-	path         string
-	name         string
-	size         int64
-	contentType  string
-	repositoryID int64
-	refererPage  *RefererPage
-}
-
-func contentTypeForFile(fileName string) string {
-	extension := strings.ToLower(filepath.Ext(fileName))
-	return contentTypesByExtension[extension]
 }
 
 // uploadCloudFlow is github.com's upload: policy -> storage (S3) -> completion.
@@ -325,8 +245,6 @@ func (u *Uploader) requestPolicy(ctx context.Context, f uploadFile, fields, head
 	}
 	return out, nil
 }
-
-var errMissingHref = errors.New("upload response missing href")
 
 // requestStorage POSTs the file to upload_url; same-origin storage (GHES media host) also takes upload_authenticity_token.
 func (u *Uploader) requestStorage(ctx context.Context, f uploadFile, policy policyResponse, refererURL string) (Asset, error) {

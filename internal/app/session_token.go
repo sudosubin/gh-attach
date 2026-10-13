@@ -38,11 +38,11 @@ func newTokenSession(host, value string) (web.Session, error) {
 	if domain == "" || cookie.Valid() != nil {
 		return web.Session{}, errors.New("session token is invalid")
 	}
-	sameSiteCookie := *cookie
+	sameSiteCookie := new(*cookie)
 	sameSiteCookie.Name = "__Host-user_session_same_site"
 
 	return web.Session{
-		Cookies: []*http.Cookie{cookie, &sameSiteCookie},
+		Cookies: []*http.Cookie{cookie, sameSiteCookie},
 		UserAgent: browserprovider.UserAgent(
 			cookies.BrowserChrome,
 			runtime.GOOS,

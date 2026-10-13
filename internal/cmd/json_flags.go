@@ -14,18 +14,6 @@ type jsonFlagError struct {
 	error
 }
 
-type flagError struct {
-	err error
-}
-
-func (e *flagError) Error() string {
-	return e.err.Error()
-}
-
-func (e *flagError) Unwrap() error {
-	return e.err
-}
-
 type jsonFlags struct {
 	Enabled  bool
 	Fields   []string
@@ -121,9 +109,4 @@ func checkJSONFlags(cmd *cobra.Command) (*jsonFlags, error) {
 		return nil, errors.New("cannot use `--template` without specifying `--json`")
 	}
 	return nil, nil
-}
-
-func ShouldShowUsage(err error) bool {
-	var target *flagError
-	return errors.As(err, &target)
 }
