@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/sudosubin/gh-attach/internal/app"
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
-
-const sessionTokenEnv = "GH_ATTACH_SESSION_TOKEN"
 
 type AttachOptions struct {
 	FilePaths       []string
@@ -20,6 +19,7 @@ type AttachOptions struct {
 	Profile         string
 	CookieStorePath string
 	SessionToken    string
+	UseBrowser      bool
 	Markdown        bool
 	JSON            jsonFlags
 	Verbose         bool
@@ -50,6 +50,7 @@ func newCmdUpload(use string, runF func(*AttachOptions) error) *cobra.Command {
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.FilePaths = args
+			opts.UseBrowser = browserOptionsChanged(cmd)
 			var err error
 			opts.SessionToken, err = sessionToken(cmd, opts.SessionToken)
 			if err != nil {
@@ -70,6 +71,7 @@ func newCmdUpload(use string, runF func(*AttachOptions) error) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.Markdown, "markdown", false, "Output Markdown references")
 	cmd.Flags().BoolVarP(&opts.Verbose, "verbose", "v", false, "Verbose output")
 
+	setFlagErrorHandler(cmd)
 	addJSONFlags(cmd, &opts.JSON, availableJSONFields())
 	cmd.MarkFlagsMutuallyExclusive("markdown", "json")
 	for _, name := range []string{"browser", "profile", "cookie-store-path"} {
@@ -77,26 +79,6 @@ func newCmdUpload(use string, runF func(*AttachOptions) error) *cobra.Command {
 	}
 
 	return cmd
-}
-
-func sessionToken(cmd *cobra.Command, flagValue string) (string, error) {
-	value, ok := flagValue, cmd.Flags().Changed("session-token")
-	if !ok {
-		for _, name := range []string{"browser", "profile", "cookie-store-path"} {
-			if cmd.Flags().Changed(name) {
-				return "", nil
-			}
-		}
-		value, ok = os.LookupEnv(sessionTokenEnv)
-	}
-	if !ok {
-		return "", nil
-	}
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "", errors.New("session token is empty")
-	}
-	return value, nil
 }
 
 func attachRun(opts *AttachOptions) error {
@@ -110,7 +92,10 @@ func attachRun(opts *AttachOptions) error {
 		Profile:         opts.Profile,
 		CookieStorePath: opts.CookieStorePath,
 		SessionToken:    opts.SessionToken,
-		Verbose:         opts.Verbose,
+		UseBrowser:      opts.UseBrowser,
+		RequireAssetMetadata: opts.JSON.Enabled && (len(opts.JSON.Fields) == 0 ||
+			slices.Contains(opts.JSON.Fields, "id") || slices.Contains(opts.JSON.Fields, "originalName")),
+		Verbose: opts.Verbose,
 	})
 
 	var outputErr error

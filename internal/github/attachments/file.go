@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// StatUploadFile validates an upload path and returns its file information.
+// StatUploadFile rejects inputs that cannot be streamed as regular files.
 func StatUploadFile(filePath string) (os.FileInfo, error) {
 	info, err := os.Stat(filePath)
 	if err != nil {
@@ -15,6 +15,9 @@ func StatUploadFile(filePath string) (os.FileInfo, error) {
 	}
 	if info.IsDir() {
 		return nil, fmt.Errorf("%s is a directory", filePath)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", filePath)
 	}
 	return info, nil
 }

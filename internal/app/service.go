@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
+	"strings"
+	"sync"
 
+	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/sudosubin/gh-attach/internal/browserprovider"
 	"github.com/sudosubin/gh-attach/internal/cookies"
 	"github.com/sudosubin/gh-attach/internal/github/attachments"
@@ -16,13 +20,15 @@ import (
 )
 
 type Request struct {
-	FilePaths       []string
-	Repo            string
-	Browser         string
-	Profile         string
-	CookieStorePath string
-	SessionToken    string
-	Verbose         bool
+	FilePaths            []string
+	Repo                 string
+	Browser              string
+	Profile              string
+	CookieStorePath      string
+	SessionToken         string
+	UseBrowser           bool
+	RequireAssetMetadata bool
+	Verbose              bool
 }
 
 // Service orchestrates GitHub user-attachment flows.
@@ -52,15 +58,94 @@ func (s *Service) Run(ctx context.Context, req Request) ([]attachments.Asset, er
 
 	repo := rest.Repository{Host: repoSpec.Host, Owner: repoSpec.Owner, Name: repoSpec.Name}
 
-	upload, err := s.prepareCookieUpload(ctx, repo, req)
+	var logMu sync.Mutex
+	logf := func(format string, args ...any) {
+		if req.Verbose && s.stderr != nil {
+			logMu.Lock()
+			defer logMu.Unlock()
+			fmt.Fprintf(s.stderr, format, args...)
+		}
+	}
+	cookieUpload := sync.OnceValues(func() (func(string) (attachments.Asset, error), error) {
+		// Cookie resolution also logs; serialize it with per-file fallback messages.
+		if req.Verbose {
+			logMu.Lock()
+			defer logMu.Unlock()
+		}
+		return s.prepareCookieUpload(ctx, repo, req)
+	})
+
+	var token string
+	if !auth.IsEnterprise(repo.Host) && req.SessionToken == "" && !req.UseBrowser &&
+		req.Browser == "" && req.Profile == "" && req.CookieStorePath == "" && !req.RequireAssetMetadata &&
+		slices.ContainsFunc(req.FilePaths, attachments.SupportsTokenUpload) {
+		token, _ = auth.TokenForHost(repo.Host)
+		token = strings.TrimSpace(token)
+	}
+	tokenUpload := sync.OnceValues(func() (*attachments.TokenUploader, error) {
+		logf("preparing token upload for %s\n", repo.FullName())
+		return s.prepareTokenUpload(repo, token)
+	})
+
+	return uploadFiles(req.FilePaths, func(filePath string) (attachments.Asset, error) {
+		if err := ctx.Err(); err != nil {
+			return attachments.Asset{}, err
+		}
+		if _, err := attachments.StatUploadFile(filePath); err != nil {
+			return attachments.Asset{}, err
+		}
+		var firstErr error
+		if canAttemptTokenUpload(token) && attachments.SupportsTokenUpload(filePath) {
+			uploader, err := tokenUpload()
+			var asset attachments.Asset
+			if err == nil {
+				asset, err = uploader.Upload(ctx, filePath)
+			}
+			if err == nil {
+				return asset, nil
+			}
+			if ctx.Err() != nil || !isAuthenticationError(err) {
+				return attachments.Asset{}, err
+			}
+			firstErr = fmt.Errorf("token upload: %w", err)
+			logf("%s: token authentication rejected; falling back to browser cookies\n", filePath)
+		}
+		upload, err := cookieUpload()
+		if err == nil {
+			var asset attachments.Asset
+			asset, err = upload(filePath)
+			if err == nil {
+				return asset, nil
+			}
+		}
+		if firstErr != nil {
+			err = errors.Join(firstErr, fmt.Errorf("browser cookie fallback: %w", err))
+		}
+		return attachments.Asset{}, err
+	})
+}
+
+func (s *Service) prepareTokenUpload(repo rest.Repository, token string) (*attachments.TokenUploader, error) {
+	var transport http.RoundTripper
+	if s.httpClient != nil {
+		transport = s.httpClient.Transport
+	}
+	client, err := rest.NewClient(repo.Host, token, transport)
+	if err != nil {
+		return nil, fmt.Errorf("init gh api client: %w", err)
+	}
+	service, err := rest.NewService(repo.Host, client)
 	if err != nil {
 		return nil, err
 	}
-	return uploadFiles(req.FilePaths, upload)
+	resolved, err := service.ResolveRepository(repo.Owner, repo.Name)
+	if err != nil {
+		return nil, fmt.Errorf("resolve repository: %w", err)
+	}
+	return attachments.NewTokenUploader(repo.Host, token, resolved.ID, s.httpClient)
 }
 
 func (s *Service) prepareCookieUpload(ctx context.Context, repo rest.Repository, req Request) (func(string) (attachments.Asset, error), error) {
-	// Overlaps the DNS lookup with session/referer resolution below.
 	attachments.PrewarmUploadHostDNS(ctx, repo.Host)
 
 	var session web.Session
@@ -78,7 +163,7 @@ func (s *Service) prepareCookieUpload(ctx context.Context, repo rest.Repository,
 		return nil, err
 	}
 
-	uploader, err := attachments.NewUploader(repo.Host, session, nil)
+	uploader, err := attachments.NewUploader(repo.Host, session, s.httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("init uploader: %w", err)
 	}
@@ -94,12 +179,9 @@ func (s *Service) prepareCookieUpload(ctx context.Context, repo rest.Repository,
 		return nil, err
 	}
 
-	repositoryID := refererPage.Meta.RepositoryID
-	if repositoryID == 0 {
-		repositoryID, err = resolveRepositoryID(repositoryID, repo, nil)
-		if err != nil {
-			return nil, err
-		}
+	repositoryID, err := resolveRepositoryID(refererPage.Meta.RepositoryID, repo, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return func(filePath string) (attachments.Asset, error) {

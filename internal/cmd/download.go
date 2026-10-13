@@ -20,6 +20,7 @@ type DownloadOptions struct {
 	Profile         string
 	CookieStorePath string
 	SessionToken    string
+	UseBrowser      bool
 	Verbose         bool
 }
 
@@ -35,6 +36,7 @@ func NewCmdDownload(runF func(*DownloadOptions) error) *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.URL = args[0]
+			opts.UseBrowser = browserOptionsChanged(cmd)
 			var err error
 			opts.SessionToken, err = sessionToken(cmd, opts.SessionToken)
 			if err != nil {
@@ -47,6 +49,7 @@ func NewCmdDownload(runF func(*DownloadOptions) error) *cobra.Command {
 		},
 	}
 
+	setFlagErrorHandler(cmd)
 	cmd.Flags().StringVarP(&opts.Output, "output", "O", "", "File to write to (use \"-\" for standard output)")
 	cmd.Flags().BoolVar(&opts.Clobber, "clobber", false, "Overwrite an existing file")
 	cmd.Flags().StringVar(&opts.Browser, "browser", "", "Browser to use ("+cookies.BrowserChoices()+")")
@@ -73,6 +76,7 @@ func downloadRun(opts *DownloadOptions) error {
 		Profile:         opts.Profile,
 		CookieStorePath: opts.CookieStorePath,
 		SessionToken:    opts.SessionToken,
+		UseBrowser:      opts.UseBrowser,
 		Verbose:         opts.Verbose,
 	})
 	if err != nil {

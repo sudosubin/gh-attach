@@ -142,18 +142,21 @@ func TestNewCmdAttach_RejectsEmptySessionToken(t *testing.T) {
 	}
 }
 
-func TestNewCmdAttach_RejectsEmptySessionTokenEnvironment(t *testing.T) {
+func TestNewCmdAttach_IgnoresEmptySessionTokenEnvironment(t *testing.T) {
 	t.Setenv(sessionTokenEnv, " ")
+	called := false
 	cmd := NewCmdAttach(func(_ *AttachOptions) error {
-		t.Fatal("upload ran with an empty session token")
+		called = true
 		return nil
 	})
 	cmd.SetArgs([]string{"image.png"})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 
-	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "session token is empty") {
-		t.Fatalf("Execute() error = %v, want empty token error", err)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+	if !called {
+		t.Fatal("upload did not run despite optional session token")
 	}
 }
