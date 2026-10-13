@@ -143,23 +143,8 @@ func TestServiceDownload_BearerFallsBackToBrowserCookies(t *testing.T) {
 	serverURL := mustServerURL(t, server.URL)
 	configureDownloadTestAuth(t, serverURL.Host)
 
-	svc := NewService(io.Discard)
+	svc := newBrowserTestService(serverURL.Hostname())
 	svc.httpClient = server.Client()
-	svc.loginResolver = fakeLoginResolver{login: "octocat"}
-	svc.providers = map[cookies.Browser]browserprovider.BrowserProvider{
-		cookies.BrowserFirefox: stubProvider{
-			backend: "sweetcookie",
-			sessions: []browserprovider.BrowserSession{{
-				Browser: cookies.BrowserFirefox,
-				Profile: "default",
-				Cookies: []*http.Cookie{
-					{Name: "dotcom_user", Value: "octocat", Domain: serverURL.Hostname(), Path: "/", Secure: true},
-					{Name: "user_session", Value: "browser-token", Domain: serverURL.Hostname(), Path: "/", Secure: true},
-				},
-				UserAgent: "firefox",
-			}},
-		},
-	}
 
 	// when
 	body, err := svc.Download(t.Context(), DownloadRequest{
@@ -291,4 +276,24 @@ func configureDownloadTestAuth(t *testing.T, host string) {
 	if err := os.WriteFile(filepath.Join(attachDir, "attach.yml"), []byte("browsers:\n  - browser: firefox\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func newBrowserTestService(host string) *Service {
+	svc := NewService(io.Discard)
+	svc.loginResolver = fakeLoginResolver{login: "octocat"}
+	svc.providers = map[cookies.Browser]browserprovider.BrowserProvider{
+		cookies.BrowserFirefox: stubProvider{
+			backend: "sweetcookie",
+			sessions: []browserprovider.BrowserSession{{
+				Browser: cookies.BrowserFirefox,
+				Profile: "default",
+				Cookies: []*http.Cookie{
+					{Name: "dotcom_user", Value: "octocat", Domain: host, Path: "/", Secure: true},
+					{Name: "user_session", Value: "browser-token", Domain: host, Path: "/", Secure: true},
+				},
+				UserAgent: "firefox",
+			}},
+		},
+	}
+	return svc
 }
