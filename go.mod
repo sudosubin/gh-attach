@@ -10,6 +10,7 @@ require (
 	github.com/steipete/sweetcookie v0.0.2
 	golang.org/x/sync v0.24.0
 	gopkg.in/yaml.v3 v3.0.1
+	howett.net/plist v1.0.1
 )
 
 require (

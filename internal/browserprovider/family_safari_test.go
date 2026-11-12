@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"howett.net/plist"
+
 	"github.com/sudosubin/gh-attach/internal/cookies"
 )
 
@@ -43,6 +45,36 @@ func TestSafariVersion(t *testing.T) {
 	// then
 	if missing != "" {
 		t.Fatalf("missing plist should yield empty, got %q", missing)
+	}
+}
+
+func TestSafariVersion_BinaryPlist(t *testing.T) {
+	t.Parallel()
+
+	// given
+	info := map[string]string{
+		"CFBundleName":               "Safari",
+		"CFBundleShortVersionString": "27.2",
+		"CFBundleVersion":            "21624.2.5.11.8",
+	}
+	data, err := plist.Marshal(info, plist.BinaryFormat)
+	if err != nil {
+		t.Fatalf("marshal binary plist: %v", err)
+	}
+	if !strings.HasPrefix(string(data), "bplist00") {
+		t.Fatalf("fixture is not a binary plist: %q", data[:8])
+	}
+	path := filepath.Join(t.TempDir(), "Info.plist")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	// when
+	got := safariVersion(path)
+
+	// then
+	if got != "27.2" {
+		t.Fatalf("safari version = %q, want 27.2", got)
 	}
 }
 
