@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"howett.net/plist"
 )
 
 type safariFamily struct{}
@@ -20,23 +22,17 @@ func (safariFamily) userAgent(_, version string) string {
 		cmp.Or(version, "26.0")) // fallback; bump to current stable periodically
 }
 
-// safariVersion reads CFBundleShortVersionString from Safari's Info.plist (absent off macOS); its <string> value follows the key.
+// safariVersion reads CFBundleShortVersionString from an XML or binary Info.plist.
 func safariVersion(plistPath string) string {
 	b, err := os.ReadFile(plistPath)
 	if err != nil {
 		return ""
 	}
-	_, after, ok := strings.Cut(string(b), "<key>CFBundleShortVersionString</key>")
-	if !ok {
+	var info struct {
+		Version string `plist:"CFBundleShortVersionString"`
+	}
+	if _, err := plist.Unmarshal(b, &info); err != nil {
 		return ""
 	}
-	_, after, ok = strings.Cut(after, "<string>")
-	if !ok {
-		return ""
-	}
-	version, _, ok := strings.Cut(after, "</string>")
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(version)
+	return strings.TrimSpace(info.Version)
 }
