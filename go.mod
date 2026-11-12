@@ -6,7 +6,7 @@ require (
 	github.com/cli/go-gh/v2 v2.17.0
 	github.com/cli/safeexec v1.0.1
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	github.com/steipete/sweetcookie v0.1.0
 	golang.org/x/sync v0.25.0
 	gopkg.in/yaml.v3 v3.0.1
